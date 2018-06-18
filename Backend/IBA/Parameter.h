@@ -1,0 +1,210 @@
+/******************************************************************************
+ * Copyright 2017-2018 Baidu Robotic Vision Authors. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *****************************************************************************/
+#ifndef _PARAMETER_H_
+#define _PARAMETER_H_
+
+#include "Configurator.h"
+
+extern int KF_FIRST_LOCAL_FRAMES;
+extern int KF_MIN_FRAME_STEP;
+extern int KF_MIN_FEATURE_SROUCES;
+extern int KF_MIN_FEATURE_MEASUREMENTS;
+
+extern float FTR_VARIANCE;
+extern float FTR_VARIANCE_EPSILON;
+
+extern   int FTR_UNDIST_MAX_ITERATIONS;
+extern float FTR_UNDIST_CONVERGE;
+extern   int FTR_UNDIST_LUT_SIZE;
+extern   int FTR_UNDIST_DL_MAX_ITERATIONS;
+extern float FTR_UNDIST_DL_RADIUS_INITIAL;
+extern float FTR_UNDIST_DL_RADIUS_MIN;
+extern float FTR_UNDIST_DL_RADIUS_MAX;
+extern float FTR_UNDIST_DL_RADIUS_FACTOR_INCREASE;
+extern float FTR_UNDIST_DL_RADIUS_FACTOR_DECREASE;
+extern float FTR_UNDIST_DL_GAIN_RATIO_MIN;
+extern float FTR_UNDIST_DL_GAIN_RATIO_MAX;
+
+extern float IMU_GRAVITY_MAGNITUDE;
+extern  bool IMU_GRAVITY_EXCLUDED;
+extern float IMU_VARIANCE_ACCELERATION_NOISE;
+extern float IMU_VARIANCE_ACCELERATION_BIAS_WALK;
+extern float IMU_VARIANCE_GYROSCOPE_NOISE;
+extern float IMU_VARIANCE_GYROSCOPE_BIAS_WALK;
+extern float IMU_VARIANCE_EPSILON_ROTATION;
+extern float IMU_VARIANCE_EPSILON_VELOCITY;
+extern float IMU_VARIANCE_EPSILON_POSITION;
+extern float IMU_VARIANCE_EPSILON_BIAS_ACCELERATION;
+extern float IMU_VARIANCE_EPSILON_BIAS_GYROSCOPE;
+extern float IMU_WEIGHT_ROTATION;
+extern float IMU_WEIGHT_VELOCITY;
+extern float IMU_WEIGHT_POSITION;
+extern float IMU_WEIGHT_BIAS_ACCELERATION;
+extern float IMU_WEIGHT_BIAS_GYROSCOPE;
+
+extern float DEPTH_MIN;
+extern float DEPTH_MAX;
+extern float DEPTH_RANGE;
+extern float DEPTH_INITIAL;
+extern float DEPTH_VARIANCE_INITIAL;
+extern float DEPTH_VARIANCE_WALK;
+extern float DEPTH_VARIANCE_CONVERGE;
+extern float DEPTH_VARIANCE_EPSILON;
+extern float DEPTH_MIN_INLIER_RATIO;
+extern float DEPTH_EPSILON;
+
+extern   int DEPTH_TRI_MAX_ITERATIONS;
+extern float DEPTH_TRI_CONVERGE;
+extern   int DEPTH_TRI_DL_MAX_ITERATIONS;
+extern float DEPTH_TRI_DL_RADIUS_INITIAL;
+extern float DEPTH_TRI_DL_RADIUS_MIN;
+extern float DEPTH_TRI_DL_RADIUS_MAX;
+extern float DEPTH_TRI_DL_RADIUS_FACTOR_INCREASE;
+extern float DEPTH_TRI_DL_RADIUS_FACTOR_DECREASE;
+extern float DEPTH_TRI_DL_GAIN_RATIO_MIN;
+extern float DEPTH_TRI_DL_GAIN_RATIO_MAX;
+
+#ifdef CFG_DEPTH_MAP
+extern float DEPTH_MAP_FACTOR;
+extern float DEPTH_MAP_VARIANCE;
+extern float DEPTH_MAP_WEIGHT;
+extern   int DEPTH_MAP_SMOOTHNESS_PATCH_SIZE;
+extern   int DEPTH_MAP_SMOOTHNESS_PATCH_SIZE_HALF;
+extern   int DEPTH_MAP_SMOOTHNESS_PATCH_PIXELS;
+extern   int DEPTH_MAP_SMOOTHNESS_PATCH_CENTER;
+extern   int DEPTH_MAP_SMOOTHNESS_MAX_DEVIATION;
+#endif
+
+extern   int BA_MAX_ITERATIONS;
+extern float BA_WEIGHT_FEATURE;
+extern float BA_WEIGHT_FEATURE_KEY_FRAME;
+extern float BA_WEIGHT_PRIOR_CAMERA_MOTION;
+extern float BA_WEIGHT_PRIOR_CAMERA_INITIAL;
+extern float BA_WEIGHT_PRIOR_CAMERA_RELATIVE_CONSTRAINT;
+extern float BA_WEIGHT_PRIOR_CAMERA_POSE;
+extern float BA_WEIGHT_PRIOR_DEPTH;
+extern float BA_WEIGHT_IMU;
+extern float BA_WEIGHT_FIX_ORIGIN;
+extern float BA_WEIGHT_FIX_POSITION_Z;
+extern float BA_WEIGHT_FIX_MOTION;
+extern float BA_VARIANCE_FIX_ORIGIN_ROTATION_X;
+extern float BA_VARIANCE_FIX_ORIGIN_ROTATION_Y;
+extern float BA_VARIANCE_FIX_ORIGIN_ROTATION_Z;
+extern float BA_VARIANCE_FIX_ORIGIN_POSITION;
+extern float BA_VARIANCE_FIX_POSITION_Z;
+extern float BA_VARIANCE_FIX_VELOCITY;
+extern float BA_VARIANCE_FIX_VELOCITY_INITIAL;
+extern float BA_VARIANCE_FIX_VELOCITY_INVALID;
+extern float BA_VARIANCE_FIX_BIAS_ACCELERATION;
+extern float BA_VARIANCE_FIX_BIAS_ACCELERATION_INITIAL;
+extern float BA_VARIANCE_FIX_BIAS_ACCELERATION_INVALID;
+extern float BA_VARIANCE_FIX_BIAS_GYROSCOPE;
+extern float BA_VARIANCE_FIX_BIAS_GYROSCOPE_INITIAL;
+extern float BA_VARIANCE_FIX_BIAS_GYROSCOPE_INVALID;
+extern float BA_VARIANCE_PRIOR_ROTATION;
+extern float BA_VARIANCE_PRIOR_ROTATION_INITIAL;
+extern float BA_VARIANCE_PRIOR_POSITION;
+extern float BA_VARIANCE_PRIOR_POSITION_INITIAL;
+extern float BA_VARIANCE_PRIOR_VELOCITY;
+extern float BA_VARIANCE_PRIOR_BIAS_ACCELERATION;
+extern float BA_VARIANCE_PRIOR_BIAS_GYROSCOPE;
+extern float BA_VARIANCE_PRIOR_FRAME_DEPTH;
+extern float BA_VARIANCE_MAX_ROTATION;
+extern float BA_VARIANCE_MAX_POSITION;
+extern float BA_VARIANCE_MAX_VELOCITY;
+extern float BA_VARIANCE_MAX_BIAS_ACCELERATION;
+extern float BA_VARIANCE_MAX_BIAS_GYROSCOPE;
+extern float BA_VARIANCE_MAX_DEPTH;
+extern float BA_VARIANCE_MAX_DEPTH_SLIDING_TRACK;
+extern float BA_VARIANCE_REGULARIZATION_ROTATION;
+extern float BA_VARIANCE_REGULARIZATION_POSITION;
+extern float BA_VARIANCE_REGULARIZATION_VELOCITY;
+extern float BA_VARIANCE_REGULARIZATION_BIAS_ACCELERATION;
+extern float BA_VARIANCE_REGULARIZATION_BIAS_GYROSCOPE;
+extern float BA_UPDATE_ROTATION;
+extern float BA_UPDATE_POSITION;
+extern float BA_UPDATE_VELOCITY;
+extern float BA_UPDATE_BIAS_ACCELERATION;
+extern float BA_UPDATE_BIAS_GYROSCOPE;
+extern float BA_UPDATE_DEPTH;
+extern float BA_BACK_SUBSTITUTE_ROTATION;
+extern float BA_BACK_SUBSTITUTE_POSITION;
+extern float BA_CONVERGE_ROTATION;
+extern float BA_CONVERGE_POSITION;
+extern float BA_CONVERGE_VELOCITY;
+extern float BA_CONVERGE_BIAS_ACCELERATION;
+extern float BA_CONVERGE_BIAS_GYROSCOPE;
+extern float BA_CONVERGE_DEPTH;
+extern   int BA_DL_MAX_ITERATIONS;
+extern float BA_DL_RADIUS_INITIAL;
+extern float BA_DL_RADIUS_MIN;
+extern float BA_DL_RADIUS_MAX;
+extern float BA_DL_RADIUS_FACTOR_INCREASE;
+extern float BA_DL_RADIUS_FACTOR_DECREASE;
+extern float BA_DL_GAIN_RATIO_MIN;
+extern float BA_DL_GAIN_RATIO_MAX;
+extern float BA_PCG_CONDITIONER_MAX;
+extern float BA_PCG_CONDITIONER_EPSILON;
+extern   int BA_PCG_MIN_ITERATIONS;
+extern float BA_PCG_MIN_CONVERGE_RESIDUAL_RATIO;
+extern float BA_PCG_MIN_CONVERGE_PROBABILITY;
+extern   int BA_PCG_MAX_ITERATIONS;
+extern float BA_PCG_MAX_CONVERGE_RESIDUAL_RATIO;
+extern float BA_PCG_MAX_CONVERGE_PROBABILITY;
+
+extern  int LBA_MAX_SLIDING_TRACK_LENGTH;
+extern  int LBA_MAX_LOCAL_FRAMES;
+extern bool LBA_RESET_DEPTH_INFORMATION;
+extern  int LBA_PROPAGATE_CAMERA;
+extern  int LBA_PCG_CONDITIONER_BAND;
+extern bool LBA_EMBEDDED_MOTION_ITERATION;
+extern bool LBA_EMBEDDED_POINT_ITERATION;
+extern bool LBA_MARGINALIZATION_REFERENCE_NEAREST;
+extern bool LBA_MARGINALIZATION_PARTIAL;
+extern bool LBA_MARGINALIZATION_CHECK_RANK;
+extern bool LBA_MARGINALIZATION_CHECK_INVERTIBLE;
+
+extern float GBA_MAX_IMU_TIME_INTERVAL;
+extern  bool GBA_RESET_DEPTH_INFORMATION;
+extern  bool GBA_PROPAGATE_CAMERA;
+extern   int GBA_PCG_CONDITIONER_BAND;
+extern  bool GBA_EMBEDDED_MOTION_ITERATION;
+extern  bool GBA_EMBEDDED_POINT_ITERATION;
+
+extern float MAX_ERROR_FEATURE;
+extern float MAX_ERROR_IMU_ROTATION;
+extern float MAX_ERROR_IMU_POSITION;
+extern float MAX_ERROR_IMU_VELOCITY;
+extern float MAX_ERROR_IMU_BIAS_ACCELERATION;
+extern float MAX_ERROR_IMU_BIAS_GYROSCOPE;
+extern float MAX_ERROR_DRIFT_ROTATION;
+extern float MAX_ERROR_DRIFT_POSITION;
+
+extern    int VW_WINDOW_WIDTH;
+extern    int VW_WINDOW_HEIGHT;
+extern  float VM_WINDOW_ASPECT_RATIO;
+extern double VW_WINDOW_DEPTH;
+extern  float VW_PROJECTION_MAX_VIEW_ANGLE;
+extern  float VW_CAMERA_DEPTH_TO_SCENE_DEPTH_RATIO;
+extern  float VW_CAMERA_SIZE_ACTIVE_RATIO;
+extern  float VW_ARCBALL_RADIUS_TO_WINDOW_SIZE_RATIO;
+extern  float VW_SCROLL_TRANSLATTON_Z_RATE;
+
+extern int TIME_AVERAGING_COUNT;
+
+extern void LoadParameters(const Configurator &cfgor);
+
+#endif
