@@ -8,7 +8,7 @@ Beside the backend solver, the library also provides an optic flow based fronten
 
 The original implementation of our ICE-BA is at https://github.com/ZJUCVG/EIBA, which only performs global BA and does not support IMU input.  
 
-**Authors:** Haomin Liu, Mingyu Chen, Yingze Bao  
+**Authors:** Haomin Liu, Mingyu Chen, Yingze Bao, Zhihao Wang  
 **Related Publications:**  
 Haomin Liu, Mingyu Chen, Guofeng Zhang, Hujun Bao and Yingze Bao. ICE-BA: Incremental, Consistent and Efficient Bundle Adjustment for
 Visual-Inertial SLAM. (Accepted by CVPR 2018).**[PDF](http://openaccess.thecvf.com/content_cvpr_2018/papers/Liu_ICE-BA_Incremental_Consistent_CVPR_2018_paper.pdf)**.  
@@ -40,6 +40,9 @@ https://opencv.org/
 
 ### Yaml
 https://github.com/jbeder/yaml-cpp
+
+### brisk
+https://github.com/gwli/brisk
 
 ## 3. Build
 cd ice-ba  
