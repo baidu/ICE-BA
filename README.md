@@ -50,6 +50,5 @@ chmod +x build.sh
 ./build.sh
 
 ## 4. Run
-We provide an example to run ice-ba with EuRoC dataset.  
-[EuRoC dataset] https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets#downloads.  
+We provide an example to run ice-ba with [EuRoC dataset](https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets#downloads).  
 Please refer to **run_ice_ba.sh** for more details about how to run the example.
