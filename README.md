@@ -52,3 +52,8 @@ chmod +x build.sh
 ## 4. Run
 We provide an example to run ice-ba with [EuRoC dataset](https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets#downloads).  
 Please refer to **run_ice_ba.sh** for more details about how to run the example.
+
+## 5. Contribution
+You are very welcome to contribute to ICE-BA.
+Baidu requires the contributors to e-sign [CLA (Contributor License Agreement)](https://gist.github.com/tanzhongyibidu/6605bdef5f7bb03b9084dd8fed027037) before making a Pull Request.  We have the CLA binding to Github so it will pop up before creating a PR.
+
