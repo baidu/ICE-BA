@@ -33,7 +33,7 @@ class ViewerIBA : public Viewer {
                       const int screenCombine = false, const std::string saveFile = "",
                       const int iFrmSave = -1, const bool wnd = true);
   virtual void Reset();
-  virtual bool Run(const bool visualize = true, const bool step = true);
+  virtual bool Run(const bool visualize = true, const bool step = true, const int iFrm = -1);
   virtual int Start(const std::string viewFile = "", const bool pause = false);
   virtual void Stop(const std::string viewFile = "", const bool pause = false);
   virtual void DeleteKeyFrame(const int iFrm);
@@ -55,9 +55,6 @@ class ViewerIBA : public Viewer {
                           DRAW_CAM_LF_TYPES
                         };
   enum DrawDepthType { DRAW_DEP_LBA, DRAW_DEP_GBA,
-#ifdef CFG_DEPTH_MAP
-                       DRAW_DEP_DEPTH_MAP,
-#endif
 #ifdef CFG_GROUND_TRUTH
                        DRAW_DEP_GT,
 #endif
@@ -254,13 +251,14 @@ class ViewerIBA : public Viewer {
   virtual void DrawString(const std::string str, const int t, const bool r,
                           LA::AlignedVector3f &v, LA::AlignedMatrix3x3f &S,
                           int *rowStart = NULL);
-  virtual void DrawString(const CameraPrior::Pose &Zp, const LA::AlignedVectorXf &x,
-                          const LA::AlignedMatrixXf &S, int *rowStart = NULL);
+  virtual void DrawString(const CameraPrior::Pose &Zp, const LA::AlignedMatrixXf &S,
+                          const LA::AlignedVectorXf &x, int *rowStart = NULL);
   virtual void DrawTimeLine();
   virtual int DrawTimeLine(std::vector<float> *alphas, const float alphaMin = 0.0f,
                            const float alphaMax = 1.0f, const bool localFrm = true);
-  virtual void DrawTimeLine(const CameraPrior::Pose &Zp, std::vector<float> *alphas,
-                            const float alphaMin = 0.0f, const float alphaMax = 1.0f);
+  virtual void DrawTimeLine(const CameraPrior::Pose &Zp, const LA::AlignedMatrixXf &S,
+                            std::vector<float> *alphas, const float alphaMin = 0.0f,
+                            const float alphaMax = 1.0f);
 
   virtual void Draw2DImage();
   virtual void Draw2DFeatures();
@@ -317,7 +315,8 @@ class ViewerIBA : public Viewer {
   friend GlobalBundleAdjustor;
 
   typedef LocalBundleAdjustor::LocalFrame LocalFrame;
-  typedef GlobalBundleAdjustor::KeyFrame KeyFrame;
+  typedef LocalBundleAdjustor::KeyFrame KeyFrame;
+  //typedef GlobalBundleAdjustor::KeyFrame KeyFrame;
 
   IBA::Solver *m_solver;
   LocalBundleAdjustor *m_LBA;
@@ -331,37 +330,25 @@ class ViewerIBA : public Viewer {
   std::string m_fileNameDir, m_fileNameScreen, m_fileNameSave;
   int m_screenCombine, m_iFrmSave;
 
-  int m_iLF, m_iKFActive, m_iLFActive, m_iLFActiveLast, m_iFrmActive, m_iFrmActiveLast;
+  int m_iLF, m_iFrm, m_iKFActive, m_iLFActive, m_iLFActiveLast, m_iFrmActive, m_iFrmActiveLast;
 #ifdef CFG_STEREO
   bool m_rightActive, m_rightActiveLast;
 #endif
   FeatureIndex m_iFtrActive;
   std::vector<int> m_iFrmsKF, m_iKF2d;
   std::vector<LA::Vector3ub> m_clrsKF;
-#ifdef CFG_DEPTH_MAP
-  std::vector<float> m_dsDM;
-#endif
 
   LA::Vector2f m_factorWinToImg, m_factorImgToWin, m_sizeCross, m_sizeBox;
 
   bool m_dragingActiveFrm, m_dragingActiveFtr, m_drawPch;
-#ifdef CFG_DEPTH_MAP
-  CVD::Image<ushort> m_imgZ;
-#endif
   CVD::Image<ubyte> m_imgIT;
   CVD::Image<CVD::Rgb<ubyte> > m_imgRGB, m_imgRGBScreen, m_imgRGBTmp;
 #ifdef CFG_STEREO
   CVD::Image<CVD::Rgb<ubyte> > m_imgRGBr;
 #endif
-#ifdef CFG_DEPTH_MAP
-  TextureGL1 m_texZ;
-#endif
   TextureGL3 m_texRGB;
 #ifdef CFG_STEREO
   TextureGL3 m_texRGBr;
-#endif
-#ifdef CFG_DEPTH_MAP
-  int m_iFrmTexZ;
 #endif
   int m_iFrmTexRGB;
 #ifdef CFG_STEREO

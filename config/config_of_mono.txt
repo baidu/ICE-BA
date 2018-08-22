@@ -1,0 +1,27 @@
+param_ba_variance_regularization_depth = 1.0e-1
+
+visualize = 2
+pause = 0
+print_camera = 0
+verbose_lba = 0
+verbose_gba = 0
+serial_lba = 1
+serial_gba = 1
+debug_lba = 0
+debug_gba = 0
+history_lba = 1
+history_gba = 1
+
+input_fps = 500
+
+input_directory = /home/jio/dataset/EuRoC/MH_01_easy/
+input_image = mav0/cam0/data/*.png
+input_image_right = mav0/cam1/data/*.png
+input_feature = dat/*.dat
+input_ground_truth_max_time_difference = -1.0
+input_calibration_file = ./calibration.dat
+
+input_keyframe = *.txt
+input_relative_constraint = *.txt
+
+output_camera_file_gba = ../RMSE_mono/*.txt

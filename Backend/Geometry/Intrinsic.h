@@ -166,7 +166,9 @@ class Intrinsic {
         }
         else
 #endif
+        {
           t.x2 = t.x * t.x;
+        }
       }
       Point2D xd;
       float x, x2, y, y2, d2y, d3y, dr;
@@ -239,9 +241,9 @@ class Intrinsic {
           xd.x() = k.m_fx * xd.x() + k.m_cx;
           xd.y() = k.m_fy * xd.y() + k.m_cy;
           const int ix = int(xd.x()), iy = int(xd.y());
-          if (ix < 0 || iy < 0 || ix > ixMax || iy > iyMax)
+          if (ix < 0 || iy < 0 || ix > ixMax || iy > iyMax) {
             m_xs[i].Set(-1, -1);
-          else {
+          } else {
             m_xs[i].Set(ix, iy);
             UT::ImageInterpolateWeight(xd.x() - ix, xd.y() - iy, m_ws[i]);
           }
@@ -308,11 +310,12 @@ class Intrinsic {
   inline void Set(const int w, const int h, const float fx, const float fy = 0.0f,
                   const float cx = 0.0f, const float cy = 0.0f, const float *ds = NULL,
                   const bool fishEye = false, const float fxr = 0.0f, const float fyr = 0.0f,
-                  const Rotation3D *Rr = NULL) {
+                  const float cxr = 0.0f, const float cyr = 0.0f, const Rotation3D *Rr = NULL) {
     m_w = w;
     m_h = h;
-    const float cxr = (w - 1) * 0.5f, cyr = (h - 1) * 0.5f;
-    m_k.Set(fx, fy == 0.0f ? fx : fy, cx == 0.0f ? cxr : cx, cy == 0.0f ? cyr : cy);
+    const float _cxr = cxr == 0.0f ? (w - 1) * 0.5f : cxr;
+    const float _cyr = cyr == 0.0f ? (h - 1) * 0.5f : cyr;
+    m_k.Set(fx, fy == 0.0f ? fx : fy, cx == 0.0f ? _cxr : cx, cy == 0.0f ? _cyr : cy);
     m_radial6 = ds && (ds[5] != 0.0f || ds[6] != 0.0f || ds[7] != 0.0f) ? 1 : 0;
     m_tangential = ds && (ds[2] != 0.0f || ds[3] != 0.0f) ? 1 : 0;
     m_needUndist = m_radial6 != 0 || m_tangential != 0 ||
@@ -343,16 +346,12 @@ class Intrinsic {
         memset(m_k.m_ds, 0, sizeof(m_k.m_ds));
         memset(m_k.m_jds, 0, sizeof(m_k.m_jds));
       }
-      Set(m_k.m_fx, m_k.m_fy, cxr, cyr);
+      //Set(m_k.m_fx, m_k.m_fy, m_k.m_cx, m_k.m_cy);
+      Set(m_k.m_fx, m_k.m_fy, _cxr, _cyr);
       const float _fxr = fxr == 0.0f ? GetRectifiedFocal() : fxr;
       const float _fyr = fyr == 0.0f ? _fxr : fyr;
-      Set(_fxr, _fyr, cxr, cyr);
-#if 0
-      if (Rr)
-        m_k.m_R = *Rr;
-      else
-        m_k.m_R.Invalidate();
-#endif
+      //Set(_fxr, _fyr, m_k.m_cx, m_k.m_cy);
+      Set(_fxr, _fyr, _cxr, _cyr);
     } else {
       Set(m_k.m_fx, m_k.m_fy, m_k.m_cx, m_k.m_cy);
       m_needRect = 0;
@@ -470,10 +469,12 @@ class Intrinsic {
   inline void NormalizedToImageN(AlignedVector<Point2D> &xs) const {
     const int N = int(xs.Size()), NF = N - (N & 1);
     xp128f *x = (xp128f *) xs.Data();
-    for (int i = 0; i < NF; i += 2, ++x)
+    for (int i = 0; i < NF; i += 2, ++x) {
       NormalizedToImage2(*x);
-    if (NF != N)
+    }
+    if (NF != N) {
       NormalizedToImage(xs[NF]);
+    }
   }
   inline void NormalizedToImageN(const AlignedVector<Point2D> &xns,
                                  AlignedVector<Point2D> &xs) const {
@@ -481,27 +482,33 @@ class Intrinsic {
     xs.Resize(N);
     const xp128f *xn = (const xp128f *) xns.Data();
     xp128f *x = (xp128f *) xs.Data();
-    for (int i = 0; i < NF; i += 2, ++x, ++x)
+    for (int i = 0; i < NF; i += 2, ++x, ++x) {
       NormalizedToImage2(*xn, *x);
-    if (NF != N)
+    }
+    if (NF != N) {
       NormalizedToImage(xns[NF], xs[NF]);
+    }
   }
   inline void NormalizedToImageN(const Point2D *xns, const int N, Point2D *xs) const {
     const int NF = N - (N & 1);
     const xp128f *xn = (const xp128f *) xns;
     xp128f *x = (xp128f *) xs;
-    for (int i = 0; i < NF; i += 2, ++xn, ++x)
+    for (int i = 0; i < NF; i += 2, ++xn, ++x) {
       NormalizedToImage2(*xn, *x);
-    if (NF != N)
+    }
+    if (NF != N) {
       NormalizedToImage(xns[NF], xs[NF]);
+    }
   }
   inline void NormalizedToImageN(Point2D *xs, const int N) const {
     const int NF = N - (N & 1);
     xp128f *x = (xp128f *) xs;
-    for (int i = 0; i < NF; i += 2, ++x)
+    for (int i = 0; i < NF; i += 2, ++x) {
       NormalizedToImage2(*x);
-    if (NF != N)
+    }
+    if (NF != N) {
       NormalizedToImage(xs[NF]);
+    }
   }
   //inline void NormalizedToImage(Line2D &l) const
   //{
@@ -585,10 +592,12 @@ class Intrinsic {
   inline void ImageToNormalizedN(AlignedVector<Point2D> &xs) const {
     const int N = int(xs.Size()), NF = N - (N & 1);
     xp128f *x = (xp128f *) xs.Data();
-    for (int i = 0; i < NF; i += 2, ++x)
+    for (int i = 0; i < NF; i += 2, ++x) {
       ImageToNormalized2(*x);
-    if (NF != N)
+    }
+    if (NF != N) {
       ImageToNormalized(xs[NF]);
+    }
   }
   inline void ImageToNormalizedN(const AlignedVector<Point2D> &xs,
                                  AlignedVector<Point2D> &xns) const {
@@ -596,27 +605,33 @@ class Intrinsic {
     xns.Resize(N);
     const xp128f *x = (const xp128f *) xs.Data();
     xp128f *xn = (xp128f *) xns.Data();
-    for (int i = 0; i < NF; i += 2, ++x, ++xn)
+    for (int i = 0; i < NF; i += 2, ++x, ++xn) {
       ImageToNormalized2(*x, *xn);
-    if (NF != N)
+    }
+    if (NF != N) {
       ImageToNormalized(xs[NF], xns[NF]);
+    }
   }
   inline void ImageToNormalizedN(const Point2D *xs, const int N, Point2D *xns) const {
     const int NF = N - (N & 1);
     const xp128f *x = (const xp128f *) xs;
     xp128f *xn = (xp128f *) xns;
-    for (int i = 0; i < NF; i += 2, ++x, ++xn)
+    for (int i = 0; i < NF; i += 2, ++x, ++xn) {
       ImageToNormalized2(*x, *xn);
-    if (NF != N)
+    }
+    if (NF != N) {
       ImageToNormalized(xs[NF], xns[NF]);
+    }
   }
   inline void ImageToNormalizedN(Point2D *xs, const int N) const {
     const int NF = N - (N & 1);
     xp128f *x = (xp128f *) xs;
-    for (int i = 0; i < NF; i += 2, ++x)
+    for (int i = 0; i < NF; i += 2, ++x) {
       ImageToNormalized2(*x);
-    if (NF != N)
+    }
+    if (NF != N) {
       ImageToNormalized(xs[NF]);
+    }
   }
   //inline void ImageToNormalized(Line2D &l) const
   //{
@@ -678,15 +693,6 @@ class Intrinsic {
     fclose(fp);
     UT::PrintSaved(fileName);
     return true;
-  }
-  inline void SaveActb(FILE *fp) const {
-    const double k[] = {double(fx()), double(fy()), double(cx()), double(cy()), 0.0, 1.0};
-    fwrite(k, sizeof(k), 1, fp);
-  }
-  inline void LoadActb(FILE *fp) {
-    double k[6];
-    fread(k, sizeof(k), 1, fp);
-    Set(float(k[0]), float(k[1]), float(k[2]), float(k[3]));
   }
 
   inline void Print() const { UT::Print("%f %f %f %f\n", fx(), fy(), cx(), cy()); }

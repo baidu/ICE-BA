@@ -61,6 +61,12 @@ struct CameraPose {
   float p[3];     // position
 };                // for a 3D point in world frame X, its coordinate in camera frame is obtained by R * (X - p)
 
+struct CameraPoseCovariance {
+  float S[6][6];  // position + rotation
+                  // p = \hat p + \tilde p
+                  // R = \hat R * exp(\tilde\theta)
+};
+
 struct CameraIMUState {
   CameraPose C;   // camera pose
   float v[3];     // velocity, v[0] = FLT_MAX for unknown velocity
@@ -91,12 +97,14 @@ struct MapPointMeasurement {
   inline bool operator < (const MapPointMeasurement &X) const {
     return iFrm < X.iFrm
 #ifdef CFG_STEREO
+//#if 1
         || iFrm <= X.iFrm && !right && X.right
 #endif
         ;
   }
   Point2D x;
 #ifdef CFG_STEREO
+//#if 1
   ubyte right;
 #endif
 };
@@ -128,6 +136,7 @@ struct CurrentFrame {
                                         // (e.g. average over all visible points in current frame)
   std::string fileName;                 // image file name, just for visualization
 #ifdef CFG_STEREO
+//#if 1
   std::string fileNameRight;
 #endif
 };
@@ -148,14 +157,15 @@ struct SlidingWindow {
                                     // has been updated since last call
   std::vector<CameraPose> CsKF;     // camera poses corresponding to iFrmsKF
   std::vector<Point3D> Xs;          // updated 3D points since last call
+#ifdef CFG_CHECK_REPROJECTION
+  std::vector<std::pair<float, float> > esLF, esKF;
+#endif
 };
 
 struct RelativeConstraint {
   int iFrm1, iFrm2;
   CameraPose T;       // X2 = T * X1 = R * (X1 - p)
-  float S[6][6];      // position + rotation
-                      // p = \hat p + \tilde p
-                      // R = \hat R * exp(\tilde\theta)
+  CameraPoseCovariance S;      
 };
 
 struct Error {

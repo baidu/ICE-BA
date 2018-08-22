@@ -379,7 +379,8 @@ template<typename TYPE> class Vector3 {
     this->v1() = v1;
     this->v2() = v2;
   }
-  inline void Set(const TYPE *v) { memcpy(this, v, sizeof(Vector3<TYPE>)); }
+  inline void Set(const float *v);
+  inline void Set(const double *v);
   inline void Get(TYPE *v) const { memcpy(v, this, sizeof(Vector3<TYPE>)); }
   inline AlignedVector3f GetAlignedVector3f() const { AlignedVector3f v; Get(v); return v; }
   inline void GetMinus(Vector3<TYPE> &v) const {
@@ -397,6 +398,7 @@ template<typename TYPE> class Vector3 {
   inline TYPE SquaredLength() const { return v0() * v0() + v1() * v1() + v2() * v2(); }
   inline TYPE Sum() const { return v0() + v1() + v2(); }
   inline TYPE Maximal() const { return std::max(std::max(v0(), v1()), v2()); }
+  inline TYPE Minimal() const { return std::min(std::min(v0(), v1()), v2()); }
 
   inline void Invalidate() { v0() = UT::Invalid<TYPE>(); }
   inline bool Valid() const { return v0() != UT::Invalid<TYPE>(); }
@@ -444,6 +446,19 @@ typedef Vector3<int>  Vector3i;
 typedef Vector3<float>  Vector3f;
 typedef Vector3<double> Vector3d;
 typedef Vector3<ubyte>  Vector3ub;
+
+template<> inline void Vector3f::Set(const float *v) { memcpy(this, v, sizeof(Vector3f)); }
+template<> inline void Vector3d::Set(const double *v) { memcpy(this, v, sizeof(Vector3d)); }
+template<> inline void Vector3f::Set(const double *v) {
+  v0() = static_cast<float>(v[0]);
+  v1() = static_cast<float>(v[1]);
+  v2() = static_cast<float>(v[2]);
+}
+template<> inline void Vector3d::Set(const float *v) {
+  v0() = static_cast<double>(v[0]);
+  v1() = static_cast<double>(v[1]);
+  v2() = static_cast<double>(v[2]);
+}
 }  // namespace LA
 
 #ifdef CFG_DEBUG_EIGEN

@@ -49,7 +49,9 @@ class Solver {
    * @param[in] CF current frame
    * @param[in] KF the key frame we want to push (optional)
    */
-  void PushCurrentFrame(const CurrentFrame &CF, const KeyFrame *KF = NULL);
+  void PushCurrentFrame(const CurrentFrame &CF, const KeyFrame *KF = NULL,
+                        const bool serial = false);
+  void PushKeyFrame(const KeyFrame &KF, const bool serial = false);
 
   /*
    * @brief Add relative constraint between two keyframe poses
@@ -58,6 +60,8 @@ class Solver {
   bool PushRelativeConstraint(const RelativeConstraint &Z);
 
 #ifdef CFG_GROUND_TRUTH
+  void PushIMUMeasurementsGT(const CurrentFrame &CF);
+  void EstimateMotionGT(std::vector<CameraIMUState> *XsGT);
   void PushDepthMeasurementsGT(const CurrentFrame &CF, const KeyFrame *KF = NULL,
                                const bool keyframeOnly = false);
   void TriangulateDepthsGT(std::vector<Depth> *dsGT);
@@ -73,15 +77,21 @@ class Solver {
    * @brief Call for each current frame to synchronize the optimization results
    * @param[out] SW The sliding window of interested
    */
-  void GetSlidingWindow(SlidingWindow *SW);
+  bool GetSlidingWindow(SlidingWindow *SW);
+  void PrintSlidingWindow(const SlidingWindow &SW);
 
-  const std::vector<int>& GetKeyFrameIndexes();
+  int GetKeyFrames();
+  int GetKeyFrameIndex(const int iKF);
   int SearchKeyFrame(const int iFrm);
   bool DeleteKeyFrame(const int iFrm);
-  void UpdateCameras(const std::vector<int> &iFrms, const std::vector<CameraPose> &Cs);
+  void GetMapPointIndexes(std::vector<int> *idxs);
+  void DeleteMapPoints(const std::vector<int> &idxs);
+  void UpdateCameras(const std::vector<int> &iFrms, const std::vector<CameraPose> &Cs,
+                     const bool serial = false);
 
-  void PropagateState(const std::vector<IMUMeasurement> &us, const float t1, const float t2,
-                      const CameraIMUState &X1, CameraIMUState *X2);
+  bool PropagateState(const std::vector<IMUMeasurement> &us, const float t1, const float t2,
+                      const CameraIMUState &X1, CameraIMUState *X2,
+                      CameraPoseCovariance *S = NULL);
 
   bool SaveFeatures(const std::string fileName, const std::vector<MapPointMeasurement> &zs,
                     const std::vector<MapPoint> *Xs = NULL);
@@ -98,7 +108,9 @@ class Solver {
 
   void ComputeErrorLBA(Error *e);
   void ComputeErrorGBA(Error *e);
-  void PrintRMSE();
+  float ComputeRMSELBA();
+  float ComputeRMSEGBA();
+  float GetTotalDistance();
   bool SaveCamerasLBA(const std::string fileName, const bool append = true, const bool poseOnly = true);
   bool SaveCamerasGBA(const std::string fileName, const bool append = true, const bool poseOnly = true);
   bool SaveCostsLBA(const std::string fileName, const bool append = true, const int type = 0);
@@ -106,7 +118,9 @@ class Solver {
   bool SaveResidualsLBA(const std::string fileName, const bool append = true, const int type = 0);
   bool SaveResidualsGBA(const std::string fileName, const bool append = true, const int type = 0);
   bool SavePriors(const std::string fileName, const bool append = true, const int type = 0);
-  bool SavePoints(const std::string fileName, const bool append = true);
+  bool SaveMarginalizations(const std::string fileName, const bool append = true, const int type = 0);
+  bool SavePointsLBA(const std::string fileName, const bool append = true);
+  bool SavePointsGBA(const std::string fileName, const bool append = true);
   void GetTimeLBA(Time *t);
   void GetTimeGBA(Time *t);
   bool SaveTimesLBA(const std::string fileName, const bool append = true);
@@ -130,9 +144,12 @@ extern bool SaveGroundTruth(const std::string fileName, const std::vector<Camera
 extern bool LoadGroundTruth(const std::string fileName, std::vector<CameraIMUState> *XsGT);
 extern bool SaveGroundTruth(const std::string fileName, const std::vector<Depth> &dsGT);
 extern bool LoadGroundTruth(const std::string fileName, std::vector<Depth> *dsGT);
+extern bool SaveKeyFrames(const std::string fileName, const std::vector<int> &iFrms);
+extern bool LoadKeyFrames(const std::string fileName, std::vector<int> *iFrms);
 extern bool LoadKeyFrames(const std::string fileName, const std::vector<float> &ts,
                           std::vector<ubyte> *kfs, const float dtMax = 0.0f);
-extern bool LoadKeyFrames(const std::string fileName, std::vector<int> *iFrms);
+extern bool SaveMapPoints(const std::string fileName, const std::vector<int> &idxs);
+extern bool LoadMapPoints(const std::string fileName, std::vector<int> *idxs);
 extern bool SaveFeatureTracks(const std::string fileName, const std::vector<FeatureTrack> &xs);
 extern bool LoadFeatureTracks(const std::string fileName, std::vector<FeatureTrack> *xs);
 extern bool SaveCurrentFrame(const std::string fileName, const CurrentFrame &CF,
@@ -144,8 +161,11 @@ extern bool LoadRelativeConstraints(const std::string fileName, const std::vecto
 
 extern void PrintCameraPose(const int iFrm, const CameraPose &C, const bool n = false);
 extern void SaveCameraPose(const int iFrm, const CameraPose &C, FILE *fp);
+extern bool SaveCameraPoses(const std::string fileName, const std::vector<int> &iFrms,
+                            const std::vector<CameraPose> &Cs);
 extern bool LoadCameraPoses(const std::string fileName, std::vector<int> *iFrms,
                             std::vector<CameraPose> *Cs);
+extern void PrintPoints(const std::vector<Point3D> &Xs);
 extern bool AssertError(const int iFrm, const Error &e);
 extern void PrintError(const std::string str, const Error &e);
 

@@ -14,9 +14,9 @@
  * limitations under the License.
  *****************************************************************************/
 #include "stdafx.h"
-#ifndef CFG_DEBUG
-#define CFG_DEBUG
-#endif
+//#ifndef CFG_DEBUG
+//#define CFG_DEBUG
+//#endif
 #include "ViewerIBA.h"
 #include "ViewerIBAKey.hpp"
 #include "IBA_internal.h"
@@ -134,8 +134,9 @@ void ViewerIBA::DrawString() {
   const FRM::Tag &T = KF ? KF->m_T : LF->m_T;
   if (KF && m_keyDrawCamTypeKF == DRAW_CAM_KF_LBA || LF && m_keyDrawCamTypeLF == DRAW_CAM_LF_LBA) {
     Viewer::DrawStringTopLeft("LBA [%d] t %.3f", T.m_iFrm, T.m_t);
-    Viewer::DrawStringCurrent("  fps %.2f  norm %.0f  schur %.0f  cam %.0f  deph %.0f  dl %.0f",
+    Viewer::DrawStringCurrent("  fps %.2f  sync %.0f  norm %.0f  schur %.0f  cam %.0f  dep %.0f  dl %.0f",
                               m_LBA->m_ts[LocalBundleAdjustor::TM_TOTAL].GetFPS(),
+                              m_LBA->m_ts[LocalBundleAdjustor::TM_SYNCHRONIZE].GetAverageMilliseconds(),
                               m_LBA->m_ts[LocalBundleAdjustor::TM_FACTOR].GetAverageMilliseconds(),
                               m_LBA->m_ts[LocalBundleAdjustor::TM_SCHUR_COMPLEMENT].GetAverageMilliseconds(),
                               m_LBA->m_ts[LocalBundleAdjustor::TM_CAMERA].GetAverageMilliseconds(),
@@ -143,8 +144,9 @@ void ViewerIBA::DrawString() {
                               m_LBA->m_ts[LocalBundleAdjustor::TM_UPDATE].GetAverageMilliseconds());
   } else if (KF && m_keyDrawCamTypeKF == DRAW_CAM_KF_GBA) {
     Viewer::DrawStringTopLeft("GBA [%d] t %.3f", T.m_iFrm, T.m_t);
-    Viewer::DrawStringCurrent("  fps %.2f  norm %.0f  schur %.0f  cam %.0f  deph %.0f  dl %.0f",
+    Viewer::DrawStringCurrent("  fps %.2f  sync %.0f  norm %.0f  schur %.0f  cam %.0f  dep %.0f  dl %.0f",
                               m_GBA->m_ts[GlobalBundleAdjustor::TM_TOTAL].GetFPS(),
+                              m_GBA->m_ts[GlobalBundleAdjustor::TM_SYNCHRONIZE].GetFPS(),
                               m_GBA->m_ts[GlobalBundleAdjustor::TM_FACTOR].GetAverageMilliseconds(),
                               m_GBA->m_ts[GlobalBundleAdjustor::TM_SCHUR_COMPLEMENT].GetAverageMilliseconds(),
                               m_GBA->m_ts[GlobalBundleAdjustor::TM_CAMERA].GetAverageMilliseconds(),
@@ -164,8 +166,7 @@ void ViewerIBA::DrawString() {
 #endif
       T.m_fileName;
     Viewer::DrawStringTopLeft(1, GLUT_BITMAP_HELVETICA_18, "%s", fileName.c_str());
-  }
-  else if (m_keyDrawViewType == DRAW_VIEW_3D) {
+  } else if (m_keyDrawViewType == DRAW_VIEW_3D) {
     glPushAttrib(GL_CURRENT_BIT);
     switch (m_keyDrawBgClr) {
     case DRAW_BG_BLACK: glColor3ub(255, 255, 255);  break;
@@ -254,11 +255,11 @@ void ViewerIBA::DrawString() {
       const IMU::Delta D = KF ? GetIMUDeltaGBALM(m_iKFActive) : GetIMUDeltaLF(m_iLFActive);
       switch (m_keyDrawPrfType) {
       case DRAW_PRF_IMU_DELTA_ROTATION_STATE:               str = "xdr";
-        v = (D.GetRotationState(C1, C2)).GetRodrigues();    break;
+        v = (D.GetRotationState(C1, C2)).GetRodrigues(BA_ANGLE_EPSILON);    break;
       case DRAW_PRF_IMU_DELTA_ROTATION_MEASUREMENT:         str = "zdr";
-        v = (D.GetRotationMeasurement(C1)).GetRodrigues();  break;
+        v = (D.GetRotationMeasurement(C1, BA_ANGLE_EPSILON)).GetRodrigues(BA_ANGLE_EPSILON);  break;
       case DRAW_PRF_IMU_DELTA_ROTATION_ERROR:               str = "edr";
-        v = D.GetRotationError(C1, C2);                     break;
+        v = D.GetRotationError(C1, C2, BA_ANGLE_EPSILON);                   break;
       case DRAW_PRF_IMU_DELTA_ROTATION_COVARIANCE:          str = "Sdr";
 #ifdef CFG_IMU_FULL_COVARIANCE
         S = D.m_W[0][0].GetInverseLDL();
@@ -323,21 +324,31 @@ void ViewerIBA::DrawString() {
       LA::AlignedVectorXf x;
       LA::AlignedMatrixXf S;
       const int t = (m_keyDrawPrfType - DRAW_PRF_CAMERA_PRIOR_ROTATION_STATE) % 4;
+      const float eps = 0.0f;
+      const float epsr = UT::Inverse(BA_VARIANCE_MAX_ROTATION, BA_WEIGHT_FEATURE, eps);
+      const float epsp = UT::Inverse(BA_VARIANCE_MAX_POSITION, BA_WEIGHT_FEATURE, eps);
+      const float epsv = UT::Inverse(BA_VARIANCE_MAX_VELOCITY, BA_WEIGHT_FEATURE, eps);
+      const float epsba = UT::Inverse(BA_VARIANCE_MAX_BIAS_ACCELERATION, BA_WEIGHT_FEATURE, eps);
+      const float epsbw = UT::Inverse(BA_VARIANCE_MAX_BIAS_GYROSCOPE, BA_WEIGHT_FEATURE, eps);
+      const float _eps[] = {epsp, epsp, epsp, epsr, epsr, epsr, epsv, epsv, epsv,
+                            epsba, epsba, epsba, epsbw, epsbw, epsbw};
       if (KF) {
         const int NZ = static_cast<int>(m_GBA->m_Zps.size());
         for (int iZ = 0, rowStart = 0; iZ < NZ; ++iZ) {
           const CameraPrior::Pose &Zp = m_GBA->m_Zps[iZ];
           if (Zp.m_iKFr != m_iKFActive) {
             continue;
-          } else if (t == 0 || Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &x, &S, &m_work)) {
-            DrawString(Zp, x, S, &rowStart);
+          } else if (t == 0 || Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &S, &x, NULL,
+                                                      &m_work, _eps)) {
+            DrawString(Zp, S, x, &rowStart);
           } else {
             Viewer::DrawStringTopLeft(++rowStart, GLUT_BITMAP_HELVETICA_10, "INVALID");
           }
         }
       } else if (m_LBA->m_Zp.Pose::Valid()) {
-        if (t == 0 || m_LBA->m_Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &x, &S, &m_work)) {
-          DrawString(m_LBA->m_Zp, x, S);
+        if (t == 0 || m_LBA->m_Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &S, &x, NULL,
+                                                      &m_work, _eps)) {
+          DrawString(m_LBA->m_Zp, S, x);
         } else {
           Viewer::DrawStringTopLeft(1, GLUT_BITMAP_HELVETICA_10, "INVALID");
         }
@@ -351,7 +362,16 @@ void ViewerIBA::DrawString() {
       LA::AlignedMatrix3x3f _S;
       const int t = (m_keyDrawPrfType - DRAW_PRF_CAMERA_PRIOR_VELOCITY_STATE) % 4;
       const bool r = m_keyDrawPrfType >= DRAW_PRF_CAMERA_PRIOR_BIAS_GYROSCOPE_STATE;
-      if (t == 0 || m_LBA->m_Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &x, &S, &m_work)) {
+      const float eps = 0.0f;
+      const float epsr = UT::Inverse(BA_VARIANCE_MAX_ROTATION, BA_WEIGHT_FEATURE, eps);
+      const float epsp = UT::Inverse(BA_VARIANCE_MAX_POSITION, BA_WEIGHT_FEATURE, eps);
+      const float epsv = UT::Inverse(BA_VARIANCE_MAX_VELOCITY, BA_WEIGHT_FEATURE, eps);
+      const float epsba = UT::Inverse(BA_VARIANCE_MAX_BIAS_ACCELERATION, BA_WEIGHT_FEATURE, eps);
+      const float epsbw = UT::Inverse(BA_VARIANCE_MAX_BIAS_GYROSCOPE, BA_WEIGHT_FEATURE, eps);
+      const float _eps[] = {epsp, epsp, epsp, epsr, epsr, epsr, epsv, epsv, epsv,
+                            epsba, epsba, epsba, epsbw, epsbw, epsbw};
+      if (t == 0 || m_LBA->m_Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &S, &x, NULL,
+                                                    &m_work, _eps)) {
         const Camera C = GetCameraLF(m_LBA->m_ic2LF.front());
         const int ip = x.Size() - 9;
         switch (m_keyDrawPrfType) {
@@ -415,7 +435,7 @@ void ViewerIBA::DrawString() {
             str += " - r'";
           }
 #endif
-          R.GetRodrigues(v);
+          R.GetRodrigues(v, BA_ANGLE_EPSILON);
           v *= UT_FACTOR_RAD_TO_DEG;
         }
       } else if (m_keyDrawPrfType < DRAW_PRF_STATE_VELOCITY) {
@@ -534,8 +554,8 @@ void ViewerIBA::DrawString(const std::string str, const int t, const bool r,
   }
 }
 
-void ViewerIBA::DrawString(const CameraPrior::Pose &Zp, const LA::AlignedVectorXf &x,
-                           const LA::AlignedMatrixXf &S, int *rowStart) {
+void ViewerIBA::DrawString(const CameraPrior::Pose &Zp, const LA::AlignedMatrixXf &S,
+                           const LA::AlignedVectorXf &x, int *rowStart) {
 #ifdef CFG_DEBUG
   UT_ASSERT(Zp.Valid());
   UT_ASSERT(m_keyDrawPrfType >= DRAW_PRF_CAMERA_PRIOR_ROTATION_STATE &&
@@ -556,17 +576,18 @@ void ViewerIBA::DrawString(const CameraPrior::Pose &Zp, const LA::AlignedVectorX
         continue;
       }
       switch (m_keyDrawPrfType) {
-      case DRAW_PRF_CAMERA_PRIOR_ROTATION_STATE:                          str = "xr";
-        v = Zp.GetReferenceRotationState(C1).GetRodrigues();              break;
-      case DRAW_PRF_CAMERA_PRIOR_ROTATION_MEASUREMENT:                    str = "zr";
-        v = Zp.GetReferenceRotationMeasurement(x.Data()).GetRodrigues();  break;
-      case DRAW_PRF_CAMERA_PRIOR_ROTATION_ERROR:                          str = "er";
-        v = Zp.GetReferenceRotationError(C1, x.Data());                   break;
-      case DRAW_PRF_CAMERA_PRIOR_ROTATION_COVARIANCE:                     str = "Sr";
+      case DRAW_PRF_CAMERA_PRIOR_ROTATION_STATE:                              str = "xr";
+        v = Zp.GetReferenceRotationState(C1).GetRodrigues(BA_ANGLE_EPSILON);  break;
+      case DRAW_PRF_CAMERA_PRIOR_ROTATION_MEASUREMENT:                        str = "zr"; {
+        const Rotation3D eR = Zp.GetReferenceRotationMeasurement(x.Data(), BA_ANGLE_EPSILON);
+        v = eR.GetRodrigues(BA_ANGLE_EPSILON);                                break; }
+      case DRAW_PRF_CAMERA_PRIOR_ROTATION_ERROR:                              str = "er";
+        v = Zp.GetReferenceRotationError(C1, x.Data(), BA_ANGLE_EPSILON);     break;
+      case DRAW_PRF_CAMERA_PRIOR_ROTATION_COVARIANCE:                         str = "Sr"; {
         LA::SymmetricMatrix2x2f Srr;
         S.GetBlockDiagonal(ip, Srr);
         _S.MakeDiagonal(Srr, 0.0f);
-        break;
+        break; }
       }
       str = UT::String("[%d] ", iFrm1) + str;
     } else {
@@ -575,11 +596,13 @@ void ViewerIBA::DrawString(const CameraPrior::Pose &Zp, const LA::AlignedVectorX
       const Rigid3D C2 = iKF2 == INT_MAX ? GetCameraLF(iLF).m_T : GetCameraKF(iKF2);
       switch (m_keyDrawPrfType) {
       case DRAW_PRF_CAMERA_PRIOR_ROTATION_STATE:                            str = "xpr";
-        v = Zp.GetRotationState(C1, C2).GetRodrigues();                     break;
-      case DRAW_PRF_CAMERA_PRIOR_ROTATION_MEASUREMENT:                      str = "zpr";
-        v = Zp.GetRotationMeasurement(i, x.Data() + ip + 3).GetRodrigues(); break;
-      case DRAW_PRF_CAMERA_PRIOR_ROTATION_ERROR:                            str = "epr";
-        v = Zp.GetRotationError(C1, C2, i, x.Data() + ip + 3);              break;
+        v = Zp.GetRotationState(C1, C2).GetRodrigues(BA_ANGLE_EPSILON);     break;
+      case DRAW_PRF_CAMERA_PRIOR_ROTATION_MEASUREMENT:                      str = "zpr"; {
+        const Rotation3D R = Zp.GetRotationMeasurement(i, x.Data() + ip + 3, BA_ANGLE_EPSILON);
+        v = R.GetRodrigues(BA_ANGLE_EPSILON);                               break; }
+      case DRAW_PRF_CAMERA_PRIOR_ROTATION_ERROR:                            str = "epr"; {
+        v = Zp.GetRotationError(C1, C2, i, x.Data() + ip + 3,
+                                BA_ANGLE_EPSILON);                          break; }
       case DRAW_PRF_CAMERA_PRIOR_ROTATION_COVARIANCE:                       str = "Spr";
         S.GetBlock(ip + 3, ip + 3, _S);                                     break;
       case DRAW_PRF_CAMERA_PRIOR_POSITION_STATE:                            str = "xpp";
@@ -751,37 +774,48 @@ int ViewerIBA::DrawTimeLine(std::vector<float> *alphas, const float alphaMin,
       return LF.m_iKFNearest;
     }
   } else {
+    LA::AlignedMatrixXf S;
+    const float eps = 0.0f;
+    const float epsr = UT::Inverse(BA_VARIANCE_MAX_ROTATION, BA_WEIGHT_FEATURE, eps);
+    const float epsp = UT::Inverse(BA_VARIANCE_MAX_POSITION, BA_WEIGHT_FEATURE, eps);
+    const float epsv = UT::Inverse(BA_VARIANCE_MAX_VELOCITY, BA_WEIGHT_FEATURE, eps);
+    const float epsba = UT::Inverse(BA_VARIANCE_MAX_BIAS_ACCELERATION, BA_WEIGHT_FEATURE, eps);
+    const float epsbw = UT::Inverse(BA_VARIANCE_MAX_BIAS_GYROSCOPE, BA_WEIGHT_FEATURE, eps);
+    const float _eps[] = {epsp, epsp, epsp, epsr, epsr, epsr, epsv, epsv, epsv,
+                          epsba, epsba, epsba, epsbw, epsbw, epsbw};
     if (activeKF) {
       const int NZ = static_cast<int>(m_GBA->m_Zps.size());
       for (int iZ = 0; iZ < NZ; ++iZ) {
         const CameraPrior::Pose &Zp = m_GBA->m_Zps[iZ];
         if (Zp.m_iKFr == m_iKFActive) {
-          DrawTimeLine(Zp, alphas, alphaMin, alphaMax);
+          Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &S, NULL, NULL, &m_work, _eps);
+          DrawTimeLine(Zp, S, alphas, alphaMin, alphaMax);
         }
       }
       return -1;
     } else {
+      alphas->push_back(0.0f);
       const CameraPrior::Joint &Zp = m_LBA->m_Zp;
       if (Zp.Pose::Valid()) {
-        DrawTimeLine(Zp, alphas, alphaMin, alphaMax);
+        Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &S, NULL, NULL, &m_work, _eps);
+        DrawTimeLine(Zp, S, alphas, alphaMin, alphaMax);
       }
       return Zp.m_iKFr;
     }
   }
 }
 
-void ViewerIBA::DrawTimeLine(const CameraPrior::Pose &Zp, std::vector<float> *alphas,
-                             const float alphaMin, const float alphaMax) {
+void ViewerIBA::DrawTimeLine(const CameraPrior::Pose &Zp, const LA::AlignedMatrixXf &S,
+                             std::vector<float> *alphas, const float alphaMin,
+                             const float alphaMax) {
   float alpha;
-  LA::AlignedVectorXf x;
-  LA::AlignedMatrixXf S;
   LA::SymmetricMatrix2x2f Sr, Wr;
   LA::AlignedMatrix6x6f Sc, Wc;
   const float dp = m_keyDrawTlnPriorVarPos;
   const float dr = m_keyDrawTlnPriorVarRot * UT_FACTOR_DEG_TO_RAD;
   const float X2 = -logf(m_keyDrawCovProb) * m_keyDrawCovScale;
   const int nKFs = GetKeyFrames(), Nk = static_cast<int>(Zp.m_iKFs.size());
-  if (Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &x, &S, &m_work)) {
+  if (!S.Empty()) {
     if (alphas->at(Zp.m_iKFr) >= 0.0f) {
       S.GetBlockDiagonal(0, Sr);
       Sr *= X2;
@@ -797,7 +831,7 @@ void ViewerIBA::DrawTimeLine(const CameraPrior::Pose &Zp, std::vector<float> *al
       if (alphas->at(iFrm) < 0.0f) {
         continue;
       }
-      S.GetBlockDiagonal(ip, Sc);
+      S.GetBlock(ip, ip, Sc);
       Sc *= X2;
 //#ifdef CFG_DEBUG
 #if 0
@@ -1589,10 +1623,6 @@ void ViewerIBA::Draw3DPoints() {
       ix2z[F.m_zs[iz].m_ix] = iz;
     }
   }
-#ifdef CFG_DEPTH_MAP
-  const Rigid3D C = activeKF ? GetCameraKF(m_iKFActive) : GetCameraLF(m_iLFActive).m_T;
-  const Rigid3D Tr = C.Valid() ? m_Cv / C : C;
-#endif
   float d;
   for (int iKF = 0; iKF < nKFs; ++iKF) {
     const Rigid3D _C = GetCameraKF(iKF);
@@ -1675,15 +1705,6 @@ void ViewerIBA::Draw3DPoints() {
           }
         }
         xc[1].Invalidate();
-#ifdef CFG_DEPTH_MAP
-        if (m_keyDrawDepTypeCMP == DRAW_DEP_DEPTH_MAP && iz != -1) {
-          const FTR::Measurement &z = F.m_zs[iz];
-          const Depth::InverseGaussian dc(z.m_d, DEPTH_MAP_VARIANCE);
-          if (!dc.Invalid() && Tr.Valid()) {
-            dc.Project(Tr, z.m_z, xc[1]);
-          }
-        }
-#endif
         glPushAttrib(GL_CURRENT_BIT);
         for (int i = 0; i < 2; ++i) {
           const Point2D _xc = xc[i];
@@ -1881,8 +1902,9 @@ float ViewerIBA::ComputeMeanDepth(const Rigid3D &Cv) {
     const int Nx = int(KF.m_xs.size());
     for (int ix = 0; ix < Nx; ++ix) {
       const Depth::InverseGaussian _d = GetFeatureDepth(iKF, ix);
-      if (_d.Invalid() || !_d.ProjectD(Trz, KF.m_xs[ix].m_x, di))
+      if (_d.Invalid() || !_d.ProjectD(Trz, KF.m_xs[ix].m_x, di)) {
         continue;
+      }
       d.Update(di);
       pt = true;
 #if 0
@@ -2193,13 +2215,13 @@ void ViewerIBA::DrawProfile() {
       } else {
         switch (m_keyDrawPrfType) {
         case DRAW_PRF_IMU_DELTA_ROTATION_STATE:
-          v = (D.GetRotationState(C1, C2)).GetRodrigues();
+          v = (D.GetRotationState(C1, C2)).GetRodrigues(BA_ANGLE_EPSILON);
           break;
         case DRAW_PRF_IMU_DELTA_ROTATION_MEASUREMENT:
-          v = (D.GetRotationMeasurement(C1)).GetRodrigues();
+          v = (D.GetRotationMeasurement(C1, BA_ANGLE_EPSILON)).GetRodrigues(BA_ANGLE_EPSILON);
           break;
         case DRAW_PRF_IMU_DELTA_ROTATION_ERROR:
-          v = D.GetRotationError(C1, C2);
+          v = D.GetRotationError(C1, C2, BA_ANGLE_EPSILON);
           break;
         case DRAW_PRF_IMU_DELTA_ROTATION_COVARIANCE:
 #ifdef CFG_IMU_FULL_COVARIANCE
@@ -2307,7 +2329,7 @@ void ViewerIBA::DrawProfile() {
             GetCameraLF(iLF, DRAW_CAM_LF_GT).m_T);
           }
 #endif
-          R.GetRodrigues(v);
+          R.GetRodrigues(v, BA_ANGLE_EPSILON);
         }
       } else if (m_keyDrawPrfType < DRAW_PRF_STATE_VELOCITY) {
         if (m_keyDrawPrfType >= DRAW_PRF_STATE_POSITION_RELATIVE && iKFNearest == -1) {
@@ -2410,6 +2432,14 @@ void ViewerIBA::DrawProfile() {
       glEnd();
     }
   }
+  const float eps = 0.0f;
+  const float epsr = UT::Inverse(BA_VARIANCE_MAX_ROTATION, BA_WEIGHT_FEATURE, eps);
+  const float epsp = UT::Inverse(BA_VARIANCE_MAX_POSITION, BA_WEIGHT_FEATURE, eps);
+  const float epsv = UT::Inverse(BA_VARIANCE_MAX_VELOCITY, BA_WEIGHT_FEATURE, eps);
+  const float epsba = UT::Inverse(BA_VARIANCE_MAX_BIAS_ACCELERATION, BA_WEIGHT_FEATURE, eps);
+  const float epsbw = UT::Inverse(BA_VARIANCE_MAX_BIAS_GYROSCOPE, BA_WEIGHT_FEATURE, eps);
+  const float _eps[] = {epsp, epsp, epsp, epsr, epsr, epsr, epsv, epsv, epsv,
+                        epsba, epsba, epsba, epsbw, epsbw, epsbw};
   if (m_keyDrawPrfType >= DRAW_PRF_CAMERA_PRIOR_ROTATION_STATE &&
       m_keyDrawPrfType <= DRAW_PRF_CAMERA_PRIOR_POSITION_COVARIANCE) {
     LA::AlignedVectorXf x;
@@ -2420,12 +2450,14 @@ void ViewerIBA::DrawProfile() {
       for (int iZ = 0; iZ < NZ; ++iZ) {
         const CameraPrior::Pose &Zp = m_GBA->m_Zps[iZ];
         if (Zp.m_iKFr == m_iKFActive &&
-           (t == 0 || Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &x, &S, &m_work))) {
+           (t == 0 || Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &S, &x, NULL,
+                                             &m_work, _eps))) {
           DrawProfile(Zp, dx, ratio, yb, sv, _size, x, S);
         }
       }
     } else if (m_LBA->m_Zp.Pose::Valid()) {
-      if (t == 0 || m_LBA->m_Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &x, &S, &m_work)) {
+      if (t == 0 || m_LBA->m_Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &S, &x, NULL,
+                                                    &m_work, _eps)) {
         DrawProfile(m_LBA->m_Zp, dx, ratio, yb, sv, _size, x, S);
       }
     }
@@ -2435,7 +2467,8 @@ void ViewerIBA::DrawProfile() {
     LA::AlignedMatrixXf S;
     LA::AlignedVector3f v;
     const int t = (m_keyDrawPrfType - DRAW_PRF_CAMERA_PRIOR_VELOCITY_STATE) % 4;
-    if (t == 0 || m_LBA->m_Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &_x, &S, &m_work)) {
+    if (t == 0 || m_LBA->m_Zp.GetPriorMeasurement(BA_WEIGHT_FEATURE, &S, &_x, NULL,
+                                                  &m_work, _eps)) {
       const Camera C = GetCameraLF(m_LBA->m_ic2LF.front());
       const int ip = _x.Size() - 9;
       switch (m_keyDrawPrfType) {
@@ -2537,20 +2570,20 @@ void ViewerIBA::DrawProfile(const CameraPrior::Pose &Zp, const float dx, const f
       }
       switch (m_keyDrawPrfType) {
       case DRAW_PRF_CAMERA_PRIOR_ROTATION_STATE:
-        v = Zp.GetReferenceRotationState(C1).GetRodrigues();
+        v = Zp.GetReferenceRotationState(C1).GetRodrigues(BA_ANGLE_EPSILON);
         break;
       case DRAW_PRF_CAMERA_PRIOR_ROTATION_MEASUREMENT:
-        v = Zp.GetReferenceRotationMeasurement(x.Data()).GetRodrigues();
+        v = Zp.GetReferenceRotationMeasurement(x.Data(), BA_ANGLE_EPSILON).GetRodrigues(BA_ANGLE_EPSILON);
         break;
       case DRAW_PRF_CAMERA_PRIOR_ROTATION_ERROR:
-        v = Zp.GetReferenceRotationError(C1, x.Data() + ip);
+        v = Zp.GetReferenceRotationError(C1, x.Data() + ip, BA_ANGLE_EPSILON);
         break;
-      case DRAW_PRF_CAMERA_PRIOR_ROTATION_COVARIANCE:
+      case DRAW_PRF_CAMERA_PRIOR_ROTATION_COVARIANCE: {
         LA::Vector2f vr;
         S.GetDiagonal(ip, vr);
         vr.MakeSquareRoot();
         v.Set(vr.x(), vr.y(), 0.0f);
-        break;
+        break; }
       }
       iFrm = Zp.m_iKFr;
     } else {
@@ -2559,13 +2592,14 @@ void ViewerIBA::DrawProfile(const CameraPrior::Pose &Zp, const float dx, const f
       const Rigid3D C2 = iKF2 == INT_MAX ? GetCameraLF(iLF).m_T : GetCameraKF(iKF2);
       switch (m_keyDrawPrfType) {
       case DRAW_PRF_CAMERA_PRIOR_ROTATION_STATE:
-        v = Zp.GetRotationState(C1, C2).GetRodrigues();
+        v = Zp.GetRotationState(C1, C2).GetRodrigues(BA_ANGLE_EPSILON);
         break;
-      case DRAW_PRF_CAMERA_PRIOR_ROTATION_MEASUREMENT:
-        v = Zp.GetRotationMeasurement(i, x.Data() + ip + 3).GetRodrigues();
-        break;
+      case DRAW_PRF_CAMERA_PRIOR_ROTATION_MEASUREMENT: {
+        const Rotation3D R = Zp.GetRotationMeasurement(i, x.Data() + ip + 3, BA_ANGLE_EPSILON);
+        v = R.GetRodrigues(BA_ANGLE_EPSILON);
+        break; }
       case DRAW_PRF_CAMERA_PRIOR_ROTATION_ERROR:
-        v = Zp.GetRotationError(C1, C2, i, x.Data() + ip + 3);
+        v = Zp.GetRotationError(C1, C2, i, x.Data() + ip + 3, BA_ANGLE_EPSILON);
         break;
       case DRAW_PRF_CAMERA_PRIOR_ROTATION_COVARIANCE:
         S.GetDiagonal(ip + 3, v);
@@ -2634,14 +2668,16 @@ bool ViewerIBA::DrawProfileTypeValid(const int iFrm) {
     return iKF != -1 ? GetCameraKF(iKF).Valid() : GetCameraLF(iLF).Valid()
 #ifdef CFG_GROUND_TRUTH
         && ((m_keyDrawPrfType - DRAW_PRF_STATE_ROTATION_ABSOLUTE) % 2 == 0
-        || !m_solver->m_internal->m_CsGT.Empty())
+        //|| !m_solver->m_internal->m_CsGT.Empty())
+        || m_LBA->m_CsGT)
 #endif
         ;
   } else if (m_keyDrawPrfType >= DRAW_PRF_STATE_VELOCITY) {
     return iKF != -1 ? GetCameraGBALM(iKF).Valid() : GetCameraLF(iLF).Valid()
 #ifdef CFG_GROUND_TRUTH
         && (((m_keyDrawPrfType - DRAW_PRF_STATE_VELOCITY) & 1) == 0
-        || !m_solver->m_internal->m_CsGT.Empty())
+        //|| !m_solver->m_internal->m_CsGT.Empty())
+        || m_LBA->m_CsGT)
 #endif
         ;
   } else {
@@ -2741,16 +2777,17 @@ UT::ES<FTR::ESError, FTR::ESIndex> ViewerIBA::ComputeReprojectionError(const int
 #endif
       {
 #ifdef CFG_STEREO
-        if (i == 0 && z.m_z.Invalid() || i == 1 && z.m_zr.Invalid())
+        if (i == 0 && z.m_z.Invalid() || i == 1 && z.m_zr.Invalid()) {
           continue;
+        }
         if (i == 1) {
-          _e = e.m_exr;
+          _e = e.m_er;
           W = z.m_Wr;
         }
         else
 #endif
         {
-          _e = e.m_ex;
+          _e = e.m_e;
           W = z.m_W;
         }
         const float r2 = LA::SymmetricMatrix2x2f::MahalanobisDistance(W, _e);
@@ -2768,14 +2805,15 @@ UT::ES<FTR::ESError, FTR::ESIndex> ViewerIBA::ComputeReprojectionError(const int
     const int Nx = int(KF.m_xs.size());
     for (int ix = 0; ix < Nx; ++ix) {
       const FTR::Source &x = KF.m_xs[ix];
-      if (x.m_xr.Invalid())
+      if (x.m_xr.Invalid()) {
         continue;
+      }
       const Depth::InverseGaussian d = GetFeatureDepth(iKF, ix);
-      FTR::GetError(m_K.m_br, d, x, e.m_exr);
-      const float r2 = LA::SymmetricMatrix2x2f::MahalanobisDistance(x.m_Wr, e.m_exr);
+      FTR::GetError(m_K.m_br, d, x, e.m_er);
+      const float r2 = LA::SymmetricMatrix2x2f::MahalanobisDistance(x.m_Wr, e.m_er);
       const float F = ME::Cost<LBA_ME_FUNCTION>(r2) * r2;
       const FTR::ESIndex idx(KF.m_T.m_iFrm, ix);
-      const FTR::ESError _e(m_K.m_Kr, e.m_exr);
+      const FTR::ESError _e(m_K.m_Kr, e.m_er);
       const bool r = r2 < r2Max;
       ES.Accumulate(_e, F, idx, r);
     }

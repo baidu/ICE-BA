@@ -265,6 +265,7 @@ class Camera {
           AmB(*this, B, _AmB);
           return _AmB;
         }
+        inline void MakeZero() { memset(this, 0, sizeof(MM)); }
         inline void MakeMinus() {
           for (int i = 0; i < 14; ++i) {
             m_data[i].vmake_minus();
@@ -948,7 +949,7 @@ class Camera {
         m_wp.vdup_all_lane(UT::Inverse(s2p, w));
         R.GetTranspose(m_RT);
       }
-      inline void GetError(const Rigid3D &T, Error &e) const {
+      inline void GetError(const Rigid3D &T, Error &e, const float eps) const {
         Rotation3D eR;
         //Rotation3D RT;
         //LA::AlignedVector3f g;
@@ -957,7 +958,7 @@ class Camera {
         //RT.Transpose();
         //Rotation3D::AB(RT, T, eR);
         Rotation3D::AB(m_RT, T, eR);
-        eR.GetRodrigues(e.m_er);
+        eR.GetRodrigues(e.m_er, eps);
         T.GetPosition(e.m_ep);
       }
       inline void GetError(const ErrorJacobian &Je, const LA::AlignedVector3f &xp,
@@ -966,7 +967,7 @@ class Camera {
         e.m_ep += xp;
         LA::AlignedMatrix3x3f::AddAbTo(Je.m_Jr, xr, (float *) &e.m_er);
       }
-      inline void GetErrorJacobian(const Rigid3D &T, ErrorJacobian &Je) const {
+      inline void GetErrorJacobian(const Rigid3D &T, ErrorJacobian &Je, const float eps) const {
         Rotation3D eR;
         //Rotation3D RT;
         //LA::AlignedVector3f g;
@@ -975,13 +976,13 @@ class Camera {
         //RT.Transpose();
         //Rotation3D::AB(RT, T, eR);
         Rotation3D::AB(m_RT, T, eR);
-        eR.GetRodrigues(Je.m_e.m_er);
+        eR.GetRodrigues(Je.m_e.m_er, eps);
         T.GetPosition(Je.m_e.m_ep);
-        Rotation3D::GetRodriguesJacobianInverse(Je.m_e.m_er, Je.m_Jr);
+        Rotation3D::GetRodriguesJacobianInverse(Je.m_e.m_er, Je.m_Jr, eps);
         Je.m_Jr = Je.m_Jr * eR;
       }
-      inline void GetFactor(const Rigid3D &T, Factor &A) const {
-        GetErrorJacobian(T, A.m_Je);
+      inline void GetFactor(const Rigid3D &T, Factor &A, const float eps) const {
+        GetErrorJacobian(T, A.m_Je, eps);
         const LA::AlignedVector3f eTWr = A.m_Je.m_e.m_er * m_wr;
         const float r2p = A.m_Je.m_e.m_ep.SquaredLength();
         A.m_F = eTWr.Dot(A.m_Je.m_e.m_er) + m_wp[0] * r2p;
@@ -1000,8 +1001,9 @@ class Camera {
         return eTW.Dot(e.m_er) + m_wp[0] * e.m_ep.SquaredLength();
       }
       inline void GetReduction(const Factor &A, const Rigid3D &T, const LA::AlignedVector3f &xp,
-                               const LA::AlignedVector3f &xr, Reduction &Ra, Reduction &Rp) const {
-        GetError(T, Ra.m_e);
+                               const LA::AlignedVector3f &xr, Reduction &Ra, Reduction &Rp,
+                               const float eps) const {
+        GetError(T, Ra.m_e, eps);
         GetError(A.m_Je, xp, xr, Rp.m_e);
         Ra.m_dF = A.m_F - (Ra.m_F = GetCost(Ra.m_e));
         Rp.m_dF = A.m_F - (Rp.m_F = GetCost(Rp.m_e));
@@ -1035,9 +1037,9 @@ class Camera {
         float m_F;
       };
      public:
-      EigenErrorJacobian EigenGetErrorJacobian(const Rigid3D &T) const;
-      EigenFactor EigenGetFactor(const Rigid3D &T) const;
-      float EigenGetCost(const Rigid3D &T, const EigenVector6f &e_x) const;
+      EigenErrorJacobian EigenGetErrorJacobian(const Rigid3D &T, const float eps) const;
+      EigenFactor EigenGetFactor(const Rigid3D &T, const float eps) const;
+      float EigenGetCost(const Rigid3D &T, const EigenVector6f &e_x, const float eps) const;
 #endif
     };
     class Zero {
@@ -1162,7 +1164,7 @@ class Camera {
   }
   inline Camera(const Camera &C, const LA::AlignedVector3f *dp, const LA::AlignedVector3f *dr,
                 const LA::AlignedVector3f *dv, const LA::AlignedVector3f *dba,
-                const LA::AlignedVector3f *dbw) : m_T(C.m_T, dp, dr) {
+                const LA::AlignedVector3f *dbw, const float eps) : m_T(C.m_T, dp, dr, eps) {
     m_T.GetPosition(m_p);
     m_v = C.m_v;
     if (dv) {

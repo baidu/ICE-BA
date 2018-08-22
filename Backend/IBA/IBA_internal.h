@@ -84,6 +84,10 @@ class Internal {
   void PushDepthMeasurementsGT(const FRM::Frame &F);
 #endif
 
+  bool SavePoints(const AlignedVector<Rigid3D> &CsKF,
+                  const std::vector<::Depth::InverseGaussian> &ds,
+                  const std::string fileName, const bool append = true);
+
   void AssertConsistency();
 
  protected:
@@ -97,18 +101,23 @@ class Internal {
   GlobalMap m_GM;
   LocalBundleAdjustor m_LBA;
   GlobalBundleAdjustor m_GBA;
+  int m_debug;
   int m_nFrms;
   std::vector<FRM::Tag> m_Ts;
-  std::vector<int> m_iFrmsKF, m_iKF2d, m_id2X, m_iX2d, m_id2idx, m_idx2iX;
-  AlignedVector<Rigid3D> m_CsKF;
+  std::vector<int> m_iKF2d, m_id2X, m_iX2d, m_id2idx, m_idx2iX;
   std::vector<::Point2D> m_xs;
+  std::list<LocalMap::CameraLF> m_CsLF;
+  std::vector<LocalMap::CameraKF> m_CsKF;
   std::vector<::Depth::InverseGaussian> m_ds;
+  std::vector<ubyte> m_uds;
 #ifdef CFG_GROUND_TRUTH
+  AlignedVector<IMU::Measurement> m_usGT;
+  std::vector<int> m_iusGT;
+  std::vector<float> m_tsGT;
   std::vector<::Depth::InverseGaussian> m_dsGT;
-  AlignedVector<LA::AlignedVector3f> m_tsGT;
-  std::vector<std::vector<::Depth::Measurement> > m_zsGT;
   AlignedVector<Rotation3D> m_RsGT;
-  AlignedVector<float> m_work;
+  AlignedVector<LA::AlignedVector3f> m_TsGT;
+  std::vector<std::vector<::Depth::Measurement> > m_zsGT;
 #endif
 
   Camera::Calibration m_K;
@@ -128,10 +137,11 @@ class Internal {
   LocalBundleAdjustor::InputLocalFrame m_ILF;
   GlobalMap::InputKeyFrame m_IKF;
 
-  std::list<LocalMap::CameraLF> m_CsLF;
-  std::vector<ubyte> m_ucsKF, m_uds;
+  std::vector<GlobalMap::InputCamera> m_ICs;
 
-  std::vector<GlobalBundleAdjustor::InputCamera> m_ICs;
+  IMU::Delta m_D;
+  AlignedVector<IMU::Measurement> m_us;
+  AlignedVector<float> m_work;
 };
 
 }

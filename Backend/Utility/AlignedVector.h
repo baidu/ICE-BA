@@ -59,14 +59,16 @@ class AlignedVector {
     m_own = true;
     m_data = NULL;
     m_N = m_capacity = 0;
-    if (own)
+    if (own) {
       Set((TYPE *) V, N);
-    else
+    } else {
       Bind(V, N);
+    }
   }
   inline ~AlignedVector() {
-    if (m_data && m_own)
+    if (m_data && m_own) {
       SIMD::Free<TYPE>(m_data);
+    }
   }
   inline void operator = (const AlignedVector<TYPE, GROWTH, GROWTH_MAX> &V) {
     //Bind(V.Data(), V.Size());
@@ -99,8 +101,9 @@ class AlignedVector {
     m_capacity = N;
   }
   inline void Clear() {
-    if (m_data && m_own)
+    if (m_data && m_own) {
       SIMD::Free<TYPE>(m_data);
+    }
     m_own = true;
     m_data = NULL;
     m_N = m_capacity = 0;
@@ -202,8 +205,8 @@ class AlignedVector {
     Swap(V);
   }
   inline void MakeZero() { memset(Data(), 0, sizeof(TYPE) * Size()); }
-  inline void MakeZero(const int i1, const int i2) {
-    memset(Data() + i1, 0, sizeof(TYPE) * (i2 - i1));
+  inline void MakeZero(const int i1, const int N) {
+    memset(Data() + i1, 0, sizeof(TYPE) * N);
   }
 
   inline void Set(const AlignedVector<TYPE, GROWTH, GROWTH_MAX> &V) {
@@ -229,6 +232,16 @@ class AlignedVector {
     AlignedVector<TYPE, GROWTH, GROWTH_MAX> V;
     V.m_own = false;
     V.m_data = m_data;
+    V.m_N = V.m_capacity = N;
+    return V;
+  }
+  inline AlignedVector<TYPE, GROWTH, GROWTH_MAX> GetBlock(const int i, const int N) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && N >= 0 && i + N <= m_N);
+#endif
+    AlignedVector<TYPE, GROWTH, GROWTH_MAX> V;
+    V.m_own = false;
+    V.m_data = m_data + i;
     V.m_N = V.m_capacity = N;
     return V;
   }
@@ -263,7 +276,9 @@ class AlignedVector {
     memcpy(m_data + V1.Size(), V2.Data(), sizeof(TYPE) * V2.Size());
   }
 
-  inline bool operator == (const AlignedVector<TYPE, GROWTH, GROWTH_MAX> &V) const { return Size() == V.Size() && UT::VectorEqual(Data(), V.Data(), Size()); }
+  inline bool operator == (const AlignedVector<TYPE, GROWTH, GROWTH_MAX> &V) const {
+    return Size() == V.Size() && UT::VectorEqual(Data(), V.Data(), Size());
+  }
   inline const TYPE& operator[] (const int i) const {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i < m_N);

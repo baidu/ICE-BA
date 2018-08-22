@@ -38,11 +38,14 @@
 #define VW_KEY_XD_DRAW_DEPTH_TYPE_NEXT                  'N'
 #define VW_KEY_XD_DRAW_DEPTH_TYPE_LAST                  'B'
 #define VW_KEY_XD_DRAW_STRING                           12    // Ctrl + l
-#define VW_KEY_XD_DRAW_TIME_LINE                        'l'
+#define VW_KEY_XD_DRAW_TIME_LINE_NEXT                   'l'
+#define VW_KEY_XD_DRAW_TIME_LINE_LAST                   'k'
 #define VW_KEY_XD_DRAW_TIME_LINE_BRIGHTNESS_INCREASE_1  ']'
 #define VW_KEY_XD_DRAW_TIME_LINE_BRIGHTNESS_DECREASE_1  '['
 #define VW_KEY_XD_DRAW_TIME_LINE_BRIGHTNESS_INCREASE_2  125   // Ctrl + ]
 #define VW_KEY_XD_DRAW_TIME_LINE_BRIGHTNESS_DECREASE_2  123   // Ctrl + [
+#define VM_KEY_XD_PRINT_CALIBRATION                     3     // Ctrl + c
+#define VW_KEY_XD_INPUT_ACTIVE_FEATURE                  24    // Ctrl + x
 
 #define VW_KEY_XD_DRAW_AXIS                             'a'
 #define VW_KEY_XD_DRAW_AXIS_LENGTH_INCREASE             '.'
@@ -63,8 +66,6 @@
 #define VW_KEY_XD_DRAW_COVARIANCE_SCALE_DECREASE        40  // Down
 #endif
 
-#define VW_KEY_XD_INPUT_ACTIVE_FEATURE                  24  // Ctrl + x
-
 #define VW_KEY_PROFILE_ACTIVATE                   ' '
 #define VM_KEY_PROFILE_LEVEL_1_NEXT               'R'
 #define VM_KEY_PROFILE_LEVEL_1_LAST               'E'
@@ -74,9 +75,6 @@
 #define VM_KEY_PROFILE_LEVEL_3_LAST               4  // Ctrl + d
 
 #define VW_KEY_2D_DRAW_WARP_IMAGE                 23  // Ctrl + w
-#ifdef CFG_DEPTH_MAP
-#define VW_KEY_2D_DRAW_DEPTH_MAP                  26  // Ctrl + z
-#endif
 #define VW_KEY_2D_DRAW_FEATURE_TYPE               'x'
 #define VW_KEY_2D_DRAW_PROJECTION_TYPE            'j'
 #define VW_KEY_2D_DRAW_PROJECTION_RANGE           10  // Ctrl + j
@@ -91,7 +89,7 @@
 #define VW_KEY_3D_DRAW_CAMERA_TEXTURE             'i'
 #define VW_KEY_3D_DRAW_CAMERA_GROUND_TRUTH        'g'
 #define VW_KEY_3D_DRAW_ERROR_TYPE                 'e'
-#define VW_KEY_3D_DRAW_BACKGROUND_COLOR           'k'
+#define VW_KEY_3D_DRAW_BACKGROUND_COLOR           11  // Ctrl + k
 #define VW_KEY_3D_RESET_VIEW_POINT_ACTIVE         18  // Ctrl + r
 #define VW_KEY_3D_RESET_VIEW_POINT_VIRTUAL        'R'
 #endif

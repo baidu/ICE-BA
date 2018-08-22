@@ -120,15 +120,16 @@ void PrintStop() {
 void Print(const char *format, ...) {
   char str[UT_STRING_WIDTH_MAX];
   UT_GET_STRING(format, str);
-  MT_SCOPE_LOCK_BEGIN(g_mutex);
-  g_fp.Print(str);
-  const int len = int(strlen(str));
-  if (len == 0 || str[len - 1] == '\n') {
-    g_N = 0;
-  } else {
-    g_N += len;
-  }
-  MT_SCOPE_LOCK_END(g_mutex);
+  //MT_SCOPE_LOCK_BEGIN(g_mutex);
+  //g_fp.Print(str);
+  //const int len = int(strlen(str));
+  //if (len == 0 || str[len - 1] == '\n') {
+  //  g_N = 0;
+  //} else {
+  //  g_N += len;
+  //}
+  //MT_SCOPE_LOCK_END(g_mutex);
+  printf("%s", str);
 }
 
 void PrintSeparator(const char c) {

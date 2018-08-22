@@ -56,6 +56,8 @@ DEFINE_double(max_feature_distance_over_baseline_ratio,
               3000, "Used for slave image feature detection");
 DEFINE_string(iba_param_path, "", "iba parameters path");
 DEFINE_string(gba_camera_save_path, "", "Save the camera states to when finished");
+DEFINE_bool(stereo, false, "monocular or stereo mode");
+DEFINE_bool(save_feature, false, "Save features to .dat file");
 
 size_t load_image_data(const string& image_folder,
                        std::vector<string> &limg_name,
@@ -293,6 +295,8 @@ bool create_iba_frame(const vector<cv::KeyPoint>& kps_l,
   CF.t = rig_time;
   CF.d = kUnknownDepth;
   bool need_new_kf = std::distance(kp_it_l, kps_l.end()) >= 20 || CF.zs.size() < 20;
+  if (std::distance(kp_it_l, kps_l.end()) == 0)
+    need_new_kf = false;
   if (!need_new_kf) KF.iFrm = -1;
   else
     LOG(INFO) << "new keyframe " << KF.iFrm;
@@ -348,6 +352,8 @@ int main(int argc, char** argv) {
   }
   vector<string> img_file_paths;
   vector<string> slave_img_file_paths;
+  vector<string> iba_dat_file_paths;
+
   constexpr int reserve_num = 5000;
   img_file_paths.reserve(reserve_num);
   slave_img_file_paths.reserve(reserve_num);
@@ -356,13 +362,21 @@ int main(int argc, char** argv) {
     LOG(ERROR) << p << " is not a directory";
     return -1;
   }
+  if (!fs::is_directory(FLAGS_imgs_folder + "/dat")) {
+    fs::create_directories(FLAGS_imgs_folder + "/dat");
+  }
   vector<string> limg_name, rimg_name;
   load_image_data(FLAGS_imgs_folder, limg_name, rimg_name);
   for (int i=0; i<limg_name.size(); i++) {
     string l_png = p.string() + "/data/" + limg_name[i];
     img_file_paths.push_back(l_png);
     slave_img_file_paths.push_back(FLAGS_imgs_folder + "/mav0/cam1/data/" + rimg_name[i]);
+    iba_dat_file_paths.push_back(FLAGS_imgs_folder + "/dat/" + limg_name[i] + ".dat");
   }
+  if (!FLAGS_stereo) {
+    slave_img_file_paths.clear();
+  }
+
   if (img_file_paths.size() == 0) {
     LOG(ERROR) << "No image files for detection";
     return -1;
@@ -429,6 +443,9 @@ int main(int argc, char** argv) {
   IBA::Solver solver;
   Eigen::Vector3f last_position = Eigen::Vector3f::Zero();
   float travel_dist = 0.f;
+  if (FLAGS_save_feature) {
+    IBA::SaveCalibration(FLAGS_imgs_folder + "/calibration.dat", to_iba_calibration(duo_calib_param));
+  }
   solver.Create(to_iba_calibration(duo_calib_param),
                 257,
                 IBA_VERBOSE_NONE,
@@ -602,7 +619,7 @@ int main(int argc, char** argv) {
                                                   &key_pnts_slave,
                                                   &orb_feat_slave,
                                                   false);  // draw_debug
-      VLOG(1) << "detect slave key_pnts.size(): " << key_pnts.size() << " takes "
+      VLOG(1) << "detect slave key_pnts.size(): " << key_pnts_slave.size() << " takes "
               << std::chrono::duration_cast<std::chrono::microseconds>(
                   std::chrono::high_resolution_clock::now() - det_slave_img_start).count() / 1e3
               << " ms";
@@ -615,12 +632,14 @@ int main(int argc, char** argv) {
     IBA::KeyFrame KF;
     create_iba_frame(key_pnts, key_pnts_slave, imu_meas, time_stamp, &CF, &KF);
     solver.PushCurrentFrame(CF, KF.iFrm == -1 ? nullptr : &KF);
+    if (FLAGS_save_feature) {
+      IBA::SaveCurrentFrame(iba_dat_file_paths[it_img], CF, KF);
+    }
     pre_image_key_points = key_pnts;
     pre_image_features = orb_feat.clone();
     // show pose
     pose_viewer.displayTo("trajectory");
     cv::waitKey(1);
-
     prev_time_stamp = time_stamp;
   }
   std::string temp_file = "/tmp/" + std::to_string(offset_ts_ns) + ".txt";

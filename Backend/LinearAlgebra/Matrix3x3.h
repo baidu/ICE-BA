@@ -71,13 +71,9 @@ class AlignedMatrix3x3f {
   inline operator const float* () const { return (const float *) this; }
   inline operator       float* ()       { return (      float *) this; }
 
-  inline const float& operator() (int row, int col) const {
-    return m_data[row][col];
-  }
+  inline const float& operator() (const int i, const int j) const { return m_data[i][j]; }
+  inline       float& operator() (const int i, const int j)       { return m_data[i][j]; }
 
-  inline float& operator() (int row, int col) {
-    return m_data[row][col];
-  }
   inline bool operator == (const AlignedMatrix3x3f &M) const {
     return m00() == M.m00() && m01() == M.m01() && m02() == M.m02() &&
            m10() == M.m10() && m11() == M.m11() && m12() == M.m12() &&
@@ -544,7 +540,7 @@ class AlignedMatrix3x3f {
   }
   template<typename TYPE>
   static inline void Ab(const AlignedMatrix3x3f &A, const AlignedVector3f &b, TYPE* Ab) {
-    const float *Ar0 = &A(0, 0), *Ar1 = &A(1, 0), *Ar2 = &A(2, 0);
+    const float *Ar0 = &A.m00(), *Ar1 = &A.m10(), *Ar2 = &A.m20();
     const float *br = b;
     Ab[0] = *(Ar0 + 0) * *(br + 0) + *(Ar0 + 1) * *(br + 1) + *(Ar0 + 2) * *(br + 2);
     Ab[1] = *(Ar1 + 0) * *(br + 0) + *(Ar1 + 1) * *(br + 1) + *(Ar1 + 2) * *(br + 2);
@@ -559,7 +555,7 @@ class AlignedMatrix3x3f {
   }
   template<typename TYPE>
   static inline void AddAbTo(const AlignedMatrix3x3f &A, const AlignedVector3f &b, TYPE *Ab) {
-    const float *Ar0 = &A(0, 0), *Ar1 = &A(1, 0), *Ar2 = &A(2, 0);
+    const float *Ar0 = &A.m00(), *Ar1 = &A.m10(), *Ar2 = &A.m20();
     const float *br = b;
     Ab[0] += *(Ar0 + 0) * *(br + 0) + *(Ar0 + 1) * *(br + 1) + *(Ar0 + 2) * *(br + 2);
     Ab[1] += *(Ar1 + 0) * *(br + 0) + *(Ar1 + 1) * *(br + 1) + *(Ar1 + 2) * *(br + 2);
@@ -779,28 +775,49 @@ class AlignedMatrix3x3f {
 
 template<typename TYPE> class Matrix3x3 {
  public:
-  inline Matrix3x3<TYPE>() {}
-  inline Matrix3x3<TYPE>(const TYPE *M) { Set(M); }
+  //inline Matrix3x3<TYPE>() {}
+  //inline Matrix3x3<TYPE>(const TYPE *M) { Set(M); }
 
-  inline const TYPE& m00() const { return m_data[0]; }    inline TYPE& m00() { return m_data[0]; }
-  inline const TYPE& m01() const { return m_data[1]; }    inline TYPE& m01() { return m_data[1]; }
-  inline const TYPE& m02() const { return m_data[2]; }    inline TYPE& m02() { return m_data[2]; }
-  inline const TYPE& m10() const { return m_data[3]; }    inline TYPE& m10() { return m_data[3]; }
-  inline const TYPE& m11() const { return m_data[4]; }    inline TYPE& m11() { return m_data[4]; }
-  inline const TYPE& m12() const { return m_data[5]; }    inline TYPE& m12() { return m_data[5]; }
-  inline const TYPE& m20() const { return m_data[6]; }    inline TYPE& m20() { return m_data[6]; }
-  inline const TYPE& m21() const { return m_data[7]; }    inline TYPE& m21() { return m_data[7]; }
-  inline const TYPE& m22() const { return m_data[8]; }    inline TYPE& m22() { return m_data[8]; }
+  inline const TYPE& m00() const { return m_data[0][0]; }    inline TYPE& m00() { return m_data[0][0]; }
+  inline const TYPE& m01() const { return m_data[0][1]; }    inline TYPE& m01() { return m_data[0][1]; }
+  inline const TYPE& m02() const { return m_data[0][2]; }    inline TYPE& m02() { return m_data[0][2]; }
+  inline const TYPE& m10() const { return m_data[1][0]; }    inline TYPE& m10() { return m_data[1][0]; }
+  inline const TYPE& m11() const { return m_data[1][1]; }    inline TYPE& m11() { return m_data[1][1]; }
+  inline const TYPE& m12() const { return m_data[1][2]; }    inline TYPE& m12() { return m_data[1][2]; }
+  inline const TYPE& m20() const { return m_data[2][0]; }    inline TYPE& m20() { return m_data[2][0]; }
+  inline const TYPE& m21() const { return m_data[2][1]; }    inline TYPE& m21() { return m_data[2][1]; }
+  inline const TYPE& m22() const { return m_data[2][2]; }    inline TYPE& m22() { return m_data[2][2]; }
 
-  inline operator const TYPE* () const { return m_data; }
-  inline operator       TYPE* ()       { return m_data; }
+  inline const TYPE* operator [] (const int i) const { return m_data[i]; }
+  inline       TYPE* operator [] (const int i)       { return m_data[i]; }
   inline void operator = (const AlignedMatrix3x3f &M);
 
   inline void Set(const TYPE *M) { memcpy(this, M, sizeof(Matrix3x3<TYPE>)); }
   inline void SetLowerFromUpper() { m10() = m01(); m20() = m02(); m21() = m12(); }
+  inline void GetTranspose(Matrix3x3<TYPE> &MT) const {
+    MT.m00() = m00(); MT.m01() = m10(); MT.m02() = m20();
+    MT.m10() = m01(); MT.m11() = m11(); MT.m12() = m21();
+    MT.m20() = m02(); MT.m21() = m12(); MT.m22() = m22();
+  }
+  inline void Transpose() {
+    UT_SWAP(m01(), m10());
+    UT_SWAP(m02(), m20());
+    UT_SWAP(m12(), m21());
+  }
+  inline void Print(const bool e = false) const {
+    if (e) {
+      UT::Print("%e %e %e\n", m00(), m01(), m02());
+      UT::Print("%e %e %e\n", m10(), m11(), m12());
+      UT::Print("%e %e %e\n", m20(), m21(), m22());
+    } else {
+      UT::Print("%f %f %f\n", m00(), m01(), m02());
+      UT::Print("%f %f %f\n", m10(), m11(), m12());
+      UT::Print("%f %f %f\n", m20(), m21(), m22());
+    }
+  }
 
  public:
-  TYPE m_data[9];
+  TYPE m_data[3][3];
 };
 
 typedef Matrix3x3<float> Matrix3x3f;

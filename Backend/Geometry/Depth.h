@@ -23,10 +23,6 @@
 #include "M-Estimator.h"
 #include "AlignedVector.h"
 
-#ifdef CFG_DEPTH_MAP
-extern float DEPTH_MAP_FACTOR_INPUT;
-#endif
-
 namespace Depth {
 
 class InverseGaussian {
@@ -167,34 +163,6 @@ class InverseGaussian {
     Jx2.x() = (T12.tx() - x2.x() * T12.tz()) * d12;
     Jx2.y() = (T12.ty() - x2.y() * T12.tz()) * d12;
   }
-#ifdef CFG_DEPTH_MAP
-  inline void Project(const Rigid3D &T12, const Point2D &x1, LA::Vector2f &x2, float &d2,
-                      LA::Vector2f &Jx2, float &jd2) const {
-    const xp128f t1(x1.x(), x1.y(), 1.0f, u());
-    const xp128f t2 = T12.r20_r21_r22_tz() * t1;
-    const float t3 = t2.vsum_012();
-    const float d12 = 1.0f / (t2[3] + t3);
-    x2.x() = (T12.r00_r01_r02_tx() * t1).vsum_all() * d12;
-    x2.y() = (T12.r10_r11_r12_ty() * t1).vsum_all() * d12;
-    d2 = d12 * u();
-    Jx2.x() = (T12.tx() - x2.x() * T12.tz()) * d12;
-    Jx2.y() = (T12.ty() - x2.y() * T12.tz()) * d12;
-    jd2 = d12 * d12 * t3;
-  }
-  inline void Project(const Rigid3D &T12, const Point2D &x1, LA::Vector2f &x2, float &d12, float &d2,
-                      LA::Vector2f &Jx2, float &jd2) const {
-    const xp128f t1(x1.x(), x1.y(), 1.0f, u());
-    const xp128f t2 = T12.r20_r21_r22_tz() * t1;
-    const float t3 = t2.vsum_012();
-    d12 = 1.0f / (t2[3] + t3);
-    x2.x() = (T12.r00_r01_r02_tx() * t1).vsum_all() * d12;
-    x2.y() = (T12.r10_r11_r12_ty() * t1).vsum_all() * d12;
-    d2 = d12 * u();
-    Jx2.x() = (T12.tx() - x2.x() * T12.tz()) * d12;
-    Jx2.y() = (T12.ty() - x2.y() * T12.tz()) * d12;
-    jd2 = d12 * d12 * t3;
-  }
-#endif
   inline bool Project(const Rigid3D &T12, const Point2D &x1, const BoundingBox2D &B2,
                       Point2D &x2) const {
     const xp128f t = xp128f::get(x1.x(), x1.y(), 1.0f, u());
@@ -311,6 +279,18 @@ class InverseGaussian {
     UT::Print("%s", str.c_str());
     Print(e, n);
   }
+  inline bool AssertEqual(const InverseGaussian &d, const int verbose = 1,
+                          const std::string str = "", const float eps = 0.0f) const {
+    if (UT::AssertEqual(u(), d.u(), verbose, str + ".u", eps) &&
+        UT::AssertEqual(s2(), d.s2(), verbose, str + ".s2", eps)) {
+      return true;
+    } else if (verbose) {
+      UT::PrintSeparator();
+      Print(verbose > 1);
+      d.Print(verbose > 1);
+    }
+    return false;
+  }
 
  protected:
 
@@ -370,6 +350,8 @@ class Prior {
  public:
   class Factor {
    public:
+    inline void MakeZero() { memset(this, 0, sizeof(Factor)); }
+   public:
     float m_e, m_F, m_a, m_b;
   };
   class Reduction {
@@ -424,29 +406,11 @@ class Measurement {
   LA::SymmetricMatrix2x2f m_W;
 };
 
+float ComputeError(const int N, const Measurement *zs, const InverseGaussian &d);
 bool Triangulate(const float w, const LA::AlignedVector3f &t12, const Point2D &x1,
                  const Point2D &x2, InverseGaussian *d, const LA::SymmetricMatrix2x2f *Wx2 = NULL);
 bool Triangulate(const float w, const int N, const Measurement *zs, InverseGaussian *d,
-                 AlignedVector<float> *work, const bool initialized = true, const bool robust = false,
+                 AlignedVector<float> *work, const bool initialized = true,
                  float *eAvg = NULL);
-
-#ifdef CFG_DEPTH_MAP
-class Point {
- public:
-  LA::Vector2us m_x;
-  float m_d;
-};
-
-bool Load(const std::string fileName, CVD::Image<ushort> &Z, CVD::Image<ushort> &ZTmp,
-          AlignedVector<float> &work);
-bool Save(const std::string fileName, const CVD::Image<float> &D, CVD::Image<float> &Z);
-void DownSample(const CVD::Image<ushort> &Zs, CVD::Image<ushort> &Zd);
-void LoadDepths(const CVD::Image<ushort> &Z, const Point2D &x, ushort *zs);
-void LoadDepths(const CVD::Image<ushort> &Z, const int Nx, const LA::Vector2us *xs,
-                std::vector<Point> &xds, AlignedVector<float> &work);
-void LoadDepths(const CVD::Image<ushort> &Z, const std::vector<LA::Vector2us> &xs,
-                AlignedVector<float> &ds, AlignedVector<float> &work);
-float InterpolateDepth(const CVD::Image<ushort> &Z, const Point2D &x, AlignedVector<float> &work);
-#endif
 }
 #endif

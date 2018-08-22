@@ -25,18 +25,12 @@ EigenErrorJacobian EigenGetErrorJacobian(const Rigid3D &C1, const Source &x1, co
 #ifdef CFG_STEREO
                                        , const Point3D *br
 #endif
-#ifdef CFG_DEPTH_MAP
-                                       , const float zd2 = 0.0f
-#endif
                                        ) {
   Rigid3D T12 = C2 / C1;
 #ifdef CFG_STEREO
   if (br) {
     T12.SetTranslation(*br + T12.GetTranslation());
   }
-#endif
-#ifdef CFG_DEPTH_MAP
-  const bool vd = zd2 != 0.0f;
 #endif
 
   const EigenRotation3D e_R1 = EigenRotation3D(C1), e_R2 = EigenRotation3D(C2);
@@ -53,13 +47,10 @@ EigenErrorJacobian EigenGetErrorJacobian(const Rigid3D &C1, const Source &x1, co
   const EigenPoint3D e_X2 = EigenVector3f(e_R12 * e_X1 + e_t12);
   const EigenPoint2D e_x2 = e_X2.Project();
   const float e_d2 = 1.0f / e_X2.z();
-  const EigenVector2f e_ex = EigenVector2f(e_x2 - EigenVector2f(z2));
-  const float e_ed =
-#ifdef CFG_DEPTH_MAP
-    vd ? e_d2 - zd2 :
-#endif
+  const EigenVector2f e_e = EigenVector2f(e_x2 - EigenVector2f(z2));
     0.0f;
-  const EigenVector3f e_JXd = EigenVector3f(-e_R12 * e_x1 * e_z1 * e_z1);
+  //const EigenVector3f e_JXd = EigenVector3f(-e_R12 * e_x1 * e_z1 * e_z1);
+  const EigenVector3f e_JXd_d1 = EigenVector3f(-e_R12 * e_x1 * e_z1);
   const EigenVector3f e_w1 = EigenVector3f(e_R1.transpose() * e_X1);
   const EigenMatrix3x3f e_JXr1 = EigenMatrix3x3f(-e_R2 * EigenSkewSymmetricMatrix(e_w1));
   const EigenMatrix3x3f e_JXp1 = e_R2;
@@ -67,22 +58,16 @@ EigenErrorJacobian EigenGetErrorJacobian(const Rigid3D &C1, const Source &x1, co
   const EigenMatrix3x3f e_JXr2 = EigenMatrix3x3f(e_R2 * EigenSkewSymmetricMatrix(e_w2));
   const EigenMatrix3x3f e_JXp2 = EigenMatrix3x3f(-e_R2);
   const EigenMatrix2x3f e_JxX = e_X2.GetJacobianProjection();
-  const EigenVector2f e_Jxd = EigenVector2f(e_JxX * e_JXd);
+  //const EigenVector2f e_Jxd = EigenVector2f(e_JxX * e_JXd);
+  //const EigenVector2f e_Jxd = EigenVector2f(e_JxX * e_z1 * e_JXd_d1);
+  EigenMatrix2x3f e_JxX_z2;
+  e_JxX_z2(0, 0) = 1.0f;    e_JxX_z2(0, 1) = 0.0f;    e_JxX_z2(0, 2) = -e_x2.x();
+  e_JxX_z2(1, 0) = 0.0f;    e_JxX_z2(1, 1) = 1.0f;    e_JxX_z2(1, 2) = -e_x2.y();
+  const EigenVector2f e_Jxd = EigenVector2f(e_JxX_z2 * e_JXd_d1 * (e_d2 * e_z1));
   const EigenMatrix2x3f e_Jxr1 = EigenMatrix2x3f(e_JxX * e_JXr1);
   const EigenMatrix2x3f e_Jxp1 = EigenMatrix2x3f(e_JxX * e_JXp1);
   const EigenMatrix2x3f e_Jxr2 = EigenMatrix2x3f(e_JxX * e_JXr2);
   const EigenMatrix2x3f e_Jxp2 = EigenMatrix2x3f(e_JxX * e_JXp2);
-  const float e_jdz = -e_d2 * e_d2;
-  Eigen::Matrix<float, 1, 3> e_jzX;
-  e_jzX(0, 0) = 0.0f;
-  e_jzX(0, 1) = 0.0f;
-  e_jzX(0, 2) = 1.0f;
-  const Eigen::Matrix<float, 1, 3> e_jdX = e_jdz * e_jzX;
-  const float e_jdd = e_jdX.dot(e_JXd);
-  const Eigen::Matrix<float, 1, 3> e_jdr1 = e_jdX * e_JXr1;
-  const Eigen::Matrix<float, 1, 3> e_jdp1 = e_jdX * e_JXp1;
-  const Eigen::Matrix<float, 1, 3> e_jdr2 = e_jdX * e_JXr2;
-  const Eigen::Matrix<float, 1, 3> e_jdp2 = e_jdX * e_JXp2;
   const float eps = 1.0e-3f;
 #ifdef FTR_EIGEN_DEBUG_JACOBIAN
   //const float e_ddMax = 0.0f;
@@ -120,85 +105,64 @@ EigenErrorJacobian EigenGetErrorJacobian(const Rigid3D &C1, const Source &x1, co
   const EigenVector2f e_ex2 = EigenVector2f(e_ex1 + e_Jxd * e_dd + e_Jxr1 * e_dr1 +
                                             e_Jxp1 * e_dp1 + e_Jxr2 * e_dr2 + e_Jxp2 * e_dp2);
   UT::AssertReduction(e_ex1, e_ex2, 1, "ex", eps);
-#ifdef CFG_DEPTH_MAP
-  if (vd) {
-    const float e_ed1 = e_d2 - e_d2GT;
-    const float e_ed2 = e_ed1 + e_jdd * e_dd + e_jdr1 * e_dr1 + e_jdp1 * e_dp1 +
-                        e_jdr2 * e_dr2 + e_jdp2 * e_dp2;
-    UT::AssertReduction(e_ed1, e_ed2, 1, eps);
-  }
-#endif
 #endif
   EigenErrorJacobian e_Je;
-  e_Je.m_Jxd = e_Jxd;
-  if (cx)
-    e_Je.m_Jxcx = EigenMatrix2x6f(e_Jxp1, e_Jxr1);
-  else
-    e_Je.m_Jxcx.setZero();
-  if (cz)
-    e_Je.m_Jxcz = EigenMatrix2x6f(e_Jxp2, e_Jxr2);
-  else
-    e_Je.m_Jxcz.setZero();
-  e_Je.m_ex = e_ex;
-#ifdef CFG_DEPTH_MAP
-  if (vd) {
-    e_Je.m_jdd = e_jdd;
-    e_Je.m_jdcx = EigenVector6f(EigenVector3f(e_jdp1.transpose()),
-                                EigenVector3f(e_jdr1.transpose())).transpose();
-    e_Je.m_jdcz = EigenVector6f(EigenVector3f(e_jdp2.transpose()),
-                                EigenVector3f(e_jdr2.transpose())).transpose();
-    e_Je.m_ed = e_ed;
+  //const bool vp = fabs(e_d2) > DEPTH_PROJECTION_MIN;
+  const bool vp = e_d2 > DEPTH_PROJECTION_MIN && e_d2 < DEPTH_PROJECTION_MAX;
+  //if (vp) {
+  if (true) {
+    e_Je.m_Jd = e_Jxd;
+  } else {
+    e_Je.m_Jd.setZero();
   }
-#endif
+  if (vp && cx) {
+    e_Je.m_Jcx = EigenMatrix2x6f(e_Jxp1, e_Jxr1);
+  } else {
+    e_Je.m_Jcx.setZero();
+  }
+  if (vp && cz) {
+    e_Je.m_Jcz = EigenMatrix2x6f(e_Jxp2, e_Jxr2);
+  } else {
+    e_Je.m_Jcz.setZero();
+  }
+  e_Je.m_e = e_e;
   if (!cx && !cz) {
     FTR::ErrorJacobian::D Je;
     GetErrorJacobian(T12, x1, d1, C2, z2, Je
 #ifdef CFG_STEREO
                    , br
 #endif
-#ifdef CFG_DEPTH_MAP
-                   , zd2
-#endif
                    );
     e_Je.AssertEqual(Je, 1, "", eps);
     e_Je.Set(Je);
-  }
-  else if (!cx && cz) {
+  } else if (!cx && cz) {
     FTR::ErrorJacobian::DCZ Je;
     GetErrorJacobian(T12, x1, d1, C2, z2, Je
 #ifdef CFG_STEREO
                    , br
 #endif
-#ifdef CFG_DEPTH_MAP
-                   , zd2
-#endif
                    );
     e_Je.AssertEqual(Je, 1, "", eps);
     e_Je.Set(Je);
-  }
-  else if (cx && cz) {
+  } else if (cx && cz) {
     FTR::ErrorJacobian::DCXZ Je;
     GetErrorJacobian(T12, x1, d1, C2, z2, Je
 #ifdef CFG_STEREO
                    , br
 #endif
-#ifdef CFG_DEPTH_MAP
-                   , zd2
-#endif
                    );
     e_Je.AssertEqual(Je, 1, "", eps);
     e_Je.Set(Je);
-  }
-  else
+  } else {
     UT::Error("TODO (haomin)\n");
+  }
   return e_Je;
 }
 
 #ifdef CFG_STEREO
 EigenErrorJacobian::Stereo EigenGetErrorJacobian(const Point3D &br,
                                                  const Depth::InverseGaussian &d,
-                                                 const Source &x)
-{
+                                                 const Source &x) {
   const EigenPoint3D e_x = EigenPoint2D(x.m_x);
   const float e_d = d.u(), e_z = 1.0f / e_d;
   const EigenPoint3D e_X = EigenVector3f(e_x * e_z);
@@ -206,13 +170,18 @@ EigenErrorJacobian::Stereo EigenGetErrorJacobian(const Point3D &br,
   const EigenPoint2D e_xr = e_Xr.Project();
   const float e_dr = 1.0f / e_Xr.z();
   const EigenVector2f e_ex = EigenVector2f(e_xr - EigenVector2f(x.m_xr));
-  const EigenVector3f e_JXd = EigenVector3f(-e_x * e_z * e_z);
-  const EigenMatrix2x3f e_JxX = e_Xr.GetJacobianProjection();
-  const EigenVector2f e_Jxd = EigenVector2f(e_JxX * e_JXd);
+  //const EigenVector3f e_JXd = EigenVector3f(-e_x * e_z * e_z);
+  //const EigenMatrix2x3f e_JxX = e_Xr.GetJacobianProjection();
+  //const EigenVector2f e_Jxd = EigenVector2f(e_JxX * e_JXd);
+  const EigenVector3f e_JXd_d = EigenVector3f(-e_x * e_z);
+  EigenMatrix2x3f e_JxX_zr;
+  e_JxX_zr(0, 0) = 1.0f;    e_JxX_zr(0, 1) = 0.0f;    e_JxX_zr(0, 2) = -e_xr.x();
+  e_JxX_zr(1, 0) = 0.0f;    e_JxX_zr(1, 1) = 1.0f;    e_JxX_zr(1, 2) = -e_xr.y();
+  const EigenVector2f e_Jxd = EigenVector2f(e_JxX_zr * e_JXd_d * (e_dr * e_z));
 
   EigenErrorJacobian::Stereo e_Je;
-  e_Je.m_Jxd = e_Jxd;
-  e_Je.m_ex = e_ex;
+  e_Je.m_Jd = e_Jxd;
+  e_Je.m_e = e_ex;
 
   const float eps = 1.0e-4f;
   FTR::ErrorJacobian::D Je;

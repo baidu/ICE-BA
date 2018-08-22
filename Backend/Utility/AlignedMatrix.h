@@ -53,7 +53,8 @@ class AlignedMatrixN {
   }
 
   inline void Set(TYPE *data) {
-    Create(); memcpy(m_rows[0], data, sizeof(TYPE) * N * N);
+    Create();
+    memcpy(m_rows[0], data, sizeof(TYPE) * N * N);
   }
   inline void Bind(TYPE *data) {
     m_own = false;
@@ -109,19 +110,19 @@ class AlignedMatrixX {
   inline const TYPE** RowsData() const { return m_rows.data(); }
   inline       TYPE** RowsData()       { return m_rows.data(); }
 
-  inline void Resize(const int Nr, const int Nc, const bool retain = false,
-                     const bool symmetric = false) {
+  inline void Resize(const int Nr, const int Nc, const bool symmetric = false,
+                     const bool retain = false) {
     if (Nr == m_Nr && Nc == m_Nc && symmetric == m_symmetric) {
       return;
     }
 #ifdef CFG_DEBUG
     if (symmetric) {
       UT_ASSERT(Nr == Nc);
-      UT_ASSERT(SIMD::Ceil<TYPE>(Nc) == Nc);
+      //UT_ASSERT(SIMD::Ceil<TYPE>(Nc) == Nc);
     }
 #endif
     const int NcC = symmetric ? Nc : SIMD::Ceil<TYPE>(Nc);
-    const int N = symmetric ? ((Nc * (Nc + 1)) >> 1) : Nr * NcC;
+    const int N = symmetric ? SIMD::Ceil<TYPE>((Nc * (Nc + 1)) >> 1) : Nr * NcC;
     if (N > m_capacity) {
       TYPE *dataBkp = m_data;
       m_data = SIMD::Malloc<TYPE>(N);
@@ -206,11 +207,11 @@ class AlignedMatrixX {
 #ifdef CFG_DEBUG
     if (symmetric) {
       UT_ASSERT(Nr == Nc);
-      UT_ASSERT(SIMD::Ceil<TYPE>(Nc) == Nc);
+      //UT_ASSERT(SIMD::Ceil<TYPE>(Nc) == Nc);
     }
 #endif
     const int NcC = symmetric ? Nc : SIMD::Ceil<TYPE>(Nc);
-    const int N = symmetric ? ((Nc * (Nc + 1)) >> 1) : Nr * NcC;
+    const int N = symmetric ? SIMD::Ceil<TYPE>((Nc * (Nc + 1)) >> 1) : Nr * NcC;
     m_symmetric = symmetric;
     m_Nr = Nr;
     m_Nc = Nc;
@@ -236,10 +237,11 @@ class AlignedMatrixX {
 #ifdef CFG_DEBUG
     if (symmetric) {
       UT_ASSERT(Nr == Nc);
-      UT_ASSERT(SIMD::Ceil<TYPE>(Nc) == Nc);
+      //UT_ASSERT(SIMD::Ceil<TYPE>(Nc) == Nc);
     }
 #endif
-    return sizeof(TYPE) * (symmetric ? ((Nc * (Nc + 1)) >> 1) : Nr * SIMD::Ceil<TYPE>(Nc));
+    return sizeof(TYPE) * (symmetric ? SIMD::Ceil<TYPE>((Nc * (Nc + 1)) >> 1)
+                                     : (Nr * SIMD::Ceil<TYPE>(Nc)));
   }
 
   inline void Swap(AlignedMatrixX<TYPE> &M) {
@@ -254,7 +256,7 @@ class AlignedMatrixX {
   }
 
   inline void Set(const AlignedMatrixX<TYPE> &M) {
-    Resize(M.GetRows(), M.GetColumns(), false, M.Symmetric());
+    Resize(M.GetRows(), M.GetColumns(), M.Symmetric());
     Copy(M);
   }
 
@@ -302,89 +304,144 @@ class AlignedMatrixX {
     AlignedMatrixX<TYPE> M;
     M.m_own = false;
     M.m_symmetric = m_symmetric;
-    M.m_data = m_rows[i] + j;
+    M.m_data = i < m_Nr ? (m_rows[i] + j) : NULL;
     M.m_Nr = Nr;
     M.m_Nc = Nc;
     M.m_NcC = m_NcC - j;
     M.m_capacity = Nr * M.m_NcC;
     M.m_rows.resize(Nr);
     for (int _i = 0; _i < Nr; ++_i) {
-      M.m_rows[_i] = M.m_rows[i + _i] + j;
+      M.m_rows[_i] = m_rows[i + _i] + j;
     }
     return M;
   }
 
-  inline void Erase(const int i) {
+  inline void Erase(const int i, const int N = 1) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + N <= m_Nr && i + N <= m_Nc);
+#endif
+    const int Nc = m_Nc - N;
     if (m_symmetric) {
       for (int j = 0; j <= i; ++j) {
         TYPE *row = m_rows[j];
-        for (int k1 = i, k2 = k1 + 1; k2 < m_Nc; k1 = k2++) {
-          row[k1] = row[k2];
+        for (int k = i; k < Nc; ++k) {
+          row[k] = row[k + N];
         }
       }
-      size_t size = sizeof(TYPE) * (m_Nc - i - 1);
-      for (int i1 = i, i2 = i1 + 1; i2 < m_Nr; i1 = i2++, size -= sizeof(TYPE)) {
+      size_t size = sizeof(TYPE) * (Nc - i);
+      for (int i1 = i, i2 = i1 + N; i2 < m_Nr; ++i1, ++i2, size -= sizeof(TYPE)) {
         memcpy(m_rows[i1] + i1, m_rows[i2] + i2, size);
       }
     } else {
       for (int j = 0; j < m_Nr; ++j) {
         TYPE *row = m_rows[j];
-        for (int k1 = i, k2 = k1 + 1; k2 < m_Nc; k1 = k2++) {
-          row[k1] = row[k2];
+        for (int k = i; k < Nc; ++k) {
+          row[k] = row[k + N];
         }
       }
-      const size_t size = sizeof(TYPE) * (m_Nc - 1);
-      for (int i1 = i, i2 = i1 + 1; i2 < m_Nr; i1 = i2++) {
+      const size_t size = sizeof(TYPE) * Nc;
+      for (int i1 = i, i2 = i1 + N; i2 < m_Nr; ++i1, ++i2) {
         memcpy(m_rows[i1], m_rows[i2], size);
       }
     }
-    Resize(m_Nr - 1, m_Nc - 1, true, m_symmetric);
+    Resize(m_Nr - N, Nc, m_symmetric, true);
   }
 
-  inline void InsertZero(const int i, AlignedVector<float> *work) {
+  inline void InsertZero(const int i, const int N, AlignedVector<float> *work) {
 //#ifdef CFG_DEBUG
 #if 0
     UT_ASSERT(i >= 0 && i <= m_Nr && i <= m_Nc);
 #endif
+    const size_t size0 = sizeof(TYPE) * N;
     if (i < m_Nr && i < m_Nc) {
+#if 0
       AlignedMatrixX<TYPE> MTmp;
       work->Resize(MTmp.BindSize(m_Nr, m_Nc, m_symmetric) / sizeof(float));
       MTmp.Bind(work->Data(), m_Nr, m_Nc, m_symmetric);
       MTmp.Set(*this);
-      Resize(m_Nr + 1, m_Nc + 1, false, m_symmetric);
+      Resize(m_Nr + N, m_Nc + N, m_symmetric);
+      const int i2 = i + N;
       if (m_symmetric) {
-        size_t size1 = sizeof(TYPE) * i, size2 = sizeof(TYPE) * (m_Nc - 1 - i);
+        size_t size1 = sizeof(TYPE) * i, size2 = sizeof(TYPE) * (m_Nc - i2);
         for (int j = 0; j < i; ++j, size1 -= sizeof(TYPE)) {
           memcpy(m_rows[j] + j, MTmp[j] + j, size1);
-          memset(m_rows[j] + i, 0, sizeof(TYPE));
-          memcpy(m_rows[j] + i + 1, MTmp[j] + i, size2);
+          memset(m_rows[j] + i, 0, size0);
+          memcpy(m_rows[j] + i2, MTmp[j] + i, size2);
         }
-        memset(m_rows[i] + i, 0, sizeof(TYPE) * (m_Nc - i));
-        for (int i1 = i, i2 = i + 1; i2 < m_Nr; i1 = i2++, size2 -= sizeof(TYPE)) {
-          memcpy(m_rows[i2] + i2, MTmp[i1] + i1, size2);
+        size2 += size0;
+        for (int j = i; j < i2; ++j, size2 -= sizeof(TYPE)) {
+          memset(m_rows[j] + j, 0, size2);
+        }
+        for (int j1 = i, j2 = i2; j2 < m_Nr; ++j1, ++j2, size2 -= sizeof(TYPE)) {
+          memcpy(m_rows[j2] + j2, MTmp[j1] + j1, size2);
         }
       } else {
-        const size_t size1 = sizeof(TYPE) * i, size2 = sizeof(TYPE) * (m_Nc - 1 - i);
+        const size_t size1 = sizeof(TYPE) * i, size2 = sizeof(TYPE) * (m_Nc - i2);
         for (int j = 0; j < i; ++j) {
           memcpy(m_rows[j], MTmp[j], size1);
-          memset(m_rows[j] + i, 0, sizeof(TYPE));
-          memcpy(m_rows[j] + i + 1, MTmp[j] + i, size2);
+          memset(m_rows[j] + i, 0, size0);
+          memcpy(m_rows[j] + i2, MTmp[j] + i, size2);
         }
-        memset(m_rows[i], 0, sizeof(TYPE) * m_Nc);
-        for (int i1 = i, i2 = i + 1; i2 < m_Nr; i1 = i2++) {
-          memcpy(m_rows[i2], MTmp[i1], size1);
-          memset(m_rows[i2] + i, 0, sizeof(TYPE));
-          memcpy(m_rows[i2] + i + 1, MTmp[i1] + i, size2);
+        const size_t size = size1 + size2 + size0;
+        for (int j = i; j < i2; ++j) {
+          memset(m_rows[i], 0, size);
+        }
+        for (int j1 = i, j2 = i2; j2 < m_Nr; ++j1, ++j2) {
+          memcpy(m_rows[j2], MTmp[j1], size1);
+          memset(m_rows[j2] + i, 0, size0);
+          memcpy(m_rows[j2] + i2, MTmp[j1] + i, size2);
         }
       }
+#else
+      const int i2 = i + N, Nc2 = m_Nc - i;
+      const size_t size2 = sizeof(TYPE) * Nc2;
+      work->Resize(static_cast<int>(size2 / sizeof(float)));
+      TYPE *_work = (TYPE *) work->Data();
+      Resize(m_Nr + N, m_Nc + N, m_symmetric, true);
+      for (int _i = 0; _i < i; ++_i) {
+        memcpy(_work, m_rows[_i] + i, size2);
+        memset(m_rows[_i] + i, 0, size0);
+        memcpy(m_rows[_i] + i2, _work, size2);
+      }
+      if (m_symmetric) {
+        size_t size = sizeof(TYPE);
+        for (int _i = m_Nr - 1, _j = _i - N; _i >= i2; --_i, --_j, size += sizeof(TYPE)) {
+          memcpy(m_rows[_i] + _i, m_rows[_j] + _j, size);
+        }
+        for (int _i = i2 - 1; _i >= i; --_i, size += sizeof(TYPE)) {
+          memset(m_rows[_i] + _i, 0, size);
+        }
+      } else {
+        const int Nr = m_Nr - N;
+        for (int _i = i; _i < Nr; ++_i) {
+          memcpy(_work, m_rows[_i] + i, size2);
+          memset(m_rows[_i] + i, 0, size0);
+          memcpy(m_rows[_i] + i2, _work, size2);
+        }
+        const size_t size = sizeof(TYPE) * m_Nc;
+        for (int _i = m_Nr - 1, _j = _i - N; _i >= i2; --_i, --_j) {
+          memcpy(m_rows[_i], m_rows[_j], size);
+        }
+        for (int _i = i2 - 1; _i >= i; --_i) {
+          memset(m_rows[_i], 0, size);
+        }
+      }
+#endif
     } else {
       const int Nr = m_Nr, Nc = m_Nc;
-      Resize(Nr + 1, Nc + 1, true, m_symmetric);
-      for (int i = 0; i < m_Nr; ++i) {
-        memset(&m_rows[i][Nc], 0, sizeof(TYPE));
+      Resize(Nr + N, Nc + N, m_symmetric, true);
+      for (int _i = 0; _i < Nr; ++_i) {
+        memset(&m_rows[_i][Nc], 0, size0);
       }
-      if (!m_symmetric) {
-        memset(m_rows[Nr], 0, sizeof(TYPE) * Nc);
+      if (m_symmetric) {
+        size_t size = size0;
+        for (int _i = Nr; _i < m_Nr; ++_i, size -= sizeof(TYPE)) {
+          memset(&m_rows[_i][_i], 0, size);
+        }
+      } else {
+        for (int _i = Nr; _i < m_Nr; ++_i) {
+          memset(&m_rows[_i][Nc], 0, size0);
+        }
       }
     }
   }
@@ -402,6 +459,27 @@ class AlignedMatrixX {
       }
     }
   }
+  inline void MakeZero(const int i, const int N) {
+    const size_t size0 = sizeof(TYPE) * N;
+    for (int _i = 0; _i < i; ++_i) {
+      memset(m_rows[_i] + i, 0, size0);
+    }
+    const int i2 = i + N;
+    if (m_symmetric) {
+      size_t size = sizeof(TYPE) * (m_Nc - i);
+      for (int _i = i; _i < i2; ++_i, size -= sizeof(TYPE)) {
+        memset(m_rows[_i] + _i, 0, size);
+      }
+    } else {
+      const size_t size = sizeof(TYPE) * m_Nc;
+      for (int _i = i; _i < i2; ++_i) {
+        memset(m_rows[_i], 0, size);
+      }
+      for (int _i = i2; _i < m_Nr; ++_i) {
+        memset(m_rows[_i] + i, 0, size0);
+      }
+    }
+  }
 
   inline bool Symmetric() const { return m_symmetric; }
 
@@ -409,6 +487,7 @@ class AlignedMatrixX {
   inline int GetColumns() const { return m_Nc; }
   inline int GetRowStride() const { return m_NcC; }
   inline void GetRow(const int i, TYPE *r) const { memcpy(r, m_rows[i], sizeof(TYPE) * m_Nc); }
+  inline bool Empty() const { return m_Nr == 0 || m_Nc == 0; }
 
   inline void SaveB(FILE *fp) const {
     UT::SaveB<int>(m_Nr, fp);
@@ -428,7 +507,7 @@ class AlignedMatrixX {
     const int Nr = UT::LoadB<int>(fp);
     const int Nc = UT::LoadB<int>(fp);
     const bool symmetric = UT::LoadB<bool>(fp);
-    Resize(Nr, Nc, false, symmetric);
+    Resize(Nr, Nc, symmetric);
     if (m_symmetric) {
       for (int i = 0; i < m_Nr; ++i) {
         UT::LoadB(m_rows[i] + i, m_Nc - i, fp);

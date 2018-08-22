@@ -87,11 +87,19 @@ class AlignedVector6f {
     v0123() = v0.v012r();
     memcpy(&this->v3(), v1, 12);
   }
+  inline void Set(const Vector3f &v0, const Vector3f &v1) {
+    memcpy(&this->v0(), v0, 12);
+    memcpy(&this->v3(), v1, 12);
+  }
   inline void Set012(const float *v) { memcpy(this, v, 12); }
   inline void Set345(const float *v) { memcpy(&v3(), v, 12); }
   inline void Get(float *v) const { memcpy(v, this, 24); }
   inline void Get(AlignedVector3f &v0, AlignedVector3f &v1) const {
     v0.v012r() = v0123();
+    memcpy(v1, &this->v3(), 12);
+  }
+  inline void Get(Vector3f &v0, Vector3f &v1) const {
+    memcpy(v0, &this->v0(), 12);
     memcpy(v1, &this->v3(), 12);
   }
   inline void Get012(AlignedVector3f &v) const { v.v012r() = v0123(); }
@@ -218,8 +226,10 @@ class AlignedVector6f {
 };
 
 template<typename TYPE> class Vector6 {
+
  public:
-  static inline Vector6<TYPE> Get(const TYPE *v) { Vector6<TYPE> _v; _v.Set(v); return _v; }
+
+  static inline Vector6<TYPE> Get(const float *v) { Vector6<TYPE> _v; _v.Set(v); return _v; }
 
   inline const TYPE& v0() const { return m_data[0]; }   inline TYPE& v0() { return m_data[0]; }
   inline const TYPE& v1() const { return m_data[1]; }   inline TYPE& v1() { return m_data[1]; }
@@ -245,7 +255,7 @@ template<typename TYPE> class Vector6 {
     return m_data[row];
   }
 
-  inline void operator = (const TYPE *v) { Set(v); }
+  //inline void operator = (const TYPE *v) { Set(v); }
   inline Vector6<TYPE> operator * (const TYPE s) const {
     Vector6<TYPE> v;
     GetScaled(s, v);
@@ -298,7 +308,8 @@ template<typename TYPE> class Vector6 {
   }
 
   inline void Set(const float v) { v0() = v; v1() = v; v2() = v; v3() = v; v4() = v; v5() = v; }
-  inline void Set(const TYPE *v) { memcpy(this, v, sizeof(Vector6<TYPE>)); }
+  inline void Set(const float *v);
+  inline void Set(const double *v);
   inline void Set(const AlignedVector3f &v0, const AlignedVector3f &v1) { Set012(v0); Set345(v1); }
   inline void Set012(const float *v);
   inline void Set345(const float *v);
@@ -430,20 +441,28 @@ template<typename TYPE> class Vector6 {
 typedef Vector6<float> Vector6f;
 typedef Vector6<double> Vector6d;
 
+template<> inline void Vector6f::Set(const float *v) { memcpy(this, v, sizeof(Vector6f)); }
 template<> inline void Vector6f::Set012(const float *v) { memcpy(&v0(), v, 12); }
 template<> inline void Vector6f::Set345(const float *v) { memcpy(&v3(), v, 12); }
 // TODO (yanghongtian) : check this operation.
 template<> inline void Vector6f::Get012(float *v) const { memcpy(v, &v0(), 12); }
 template<> inline void Vector6f::Get345(float *v) const { memcpy(v, &v3(), 12); }
+
+template<> inline void Vector6d::Set(const float *v) {
+  for (int i = 0; i < 6; ++i) {
+    m_data[i] = static_cast<double>(v[i]);
+  }
+}
+template<> inline void Vector6d::Set(const double *v) { memcpy(this, v, sizeof(Vector6d)); }
 template<> inline void Vector6d::Get012(float *v) const {
-  v[0] = float(v0());
-  v[1] = float(v1());
-  v[2] = float(v2());
+  v[0] = static_cast<float>(v0());
+  v[1] = static_cast<float>(v1());
+  v[2] = static_cast<float>(v2());
 }
 template<> inline void Vector6d::Get345(float *v) const {
-  v[0] = float(v3());
-  v[1] = float(v4());
-  v[2] = float(v5());
+  v[0] = static_cast<float>(v3());
+  v[1] = static_cast<float>(v4());
+  v[2] = static_cast<float>(v5());
 }
 
 class ProductVector6f : public AlignedVector6f {

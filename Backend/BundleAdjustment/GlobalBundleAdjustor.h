@@ -31,7 +31,8 @@
 #define GBA_FLAG_FRAME_UPDATE_SCHUR_COMPLEMENT  32
 
 #define GBA_FLAG_TRACK_DEFAULT                  0
-//#define GBA_FLAG_TRACK_MEASURE                  1
+//#define GBA_FLAG_TRACK_MEASURE                1
+#define GBA_FLAG_TRACK_INVALID                  1
 #define GBA_FLAG_TRACK_UPDATE_DEPTH             2
 #define GBA_FLAG_TRACK_UPDATE_INFORMATION       4
 #define GBA_FLAG_TRACK_UPDATE_INFORMATION_ZERO  8
@@ -57,38 +58,47 @@ class GlobalBundleAdjustor : public MT::Thread {
     inline InputKeyFrame(const InputKeyFrame &IKF) { *this = IKF; }
     inline InputKeyFrame(const GlobalMap::InputKeyFrame &IKF,
                          const AlignedVector<IMU::Measurement> &us,
-                         const std::vector<Depth::InverseGaussian> &dzs) :
-                         GlobalMap::InputKeyFrame(IKF) {
+                         const std::vector<Depth::InverseGaussian> &dzs
+#ifdef CFG_HANDLE_SCALE_JUMP
+                       , const float d
+#endif
+                       ) : GlobalMap::InputKeyFrame(IKF) {
       m_us.Set(us);
       m_dzs = dzs;
+#ifdef CFG_HANDLE_SCALE_JUMP
+      m_d = d;
+#endif
     }
     inline void operator = (const InputKeyFrame &IKF) {
       *((GlobalMap::InputKeyFrame *) this) = IKF;
       m_us.Set(IKF.m_us);
       m_dzs = IKF.m_dzs;
+#ifdef CFG_HANDLE_SCALE_JUMP
+      m_d = IKF.m_d;
+#endif
     }
     inline void SaveB(FILE *fp) const {
       GlobalMap::InputKeyFrame::SaveB(fp);
       m_us.SaveB(fp);
       UT::VectorSaveB(m_dzs, fp);
+#ifdef CFG_HANDLE_SCALE_JUMP
+      UT::SaveB(m_d, fp);
+#endif
     }
     inline void LoadB(FILE *fp) {
       GlobalMap::InputKeyFrame::LoadB(fp);
       m_us.LoadB(fp);
       UT::VectorLoadB(m_dzs, fp);
+#ifdef CFG_HANDLE_SCALE_JUMP
+      UT::LoadB(m_d, fp);
+#endif
     }
    public:
     AlignedVector<IMU::Measurement> m_us;
     std::vector<Depth::InverseGaussian> m_dzs;
-  };
-
-  class InputCamera {
-   public:
-    inline InputCamera() {}
-    inline InputCamera(const int iKF, const Rigid3D &C) : m_iKF(iKF), m_C(C) {}
-   public:
-    int m_iKF;
-    Rigid3D m_C;
+#ifdef CFG_HANDLE_SCALE_JUMP
+    float m_d;
+#endif
   };
   
  public:
@@ -98,11 +108,16 @@ class GlobalBundleAdjustor : public MT::Thread {
   virtual void Reset();
   virtual void PushKeyFrame(const GlobalMap::InputKeyFrame &IKF,
                             const AlignedVector<IMU::Measurement> &us,
-                            const std::vector<Depth::InverseGaussian> &dzs);
-  virtual void DeleteKeyFrame(const int iKF, AlignedVector<IMU::Measurement> *us);
-  virtual void UpdateCameras(const int iFrm, const std::vector<InputCamera> &Cs);
-  virtual void PushCameraPriorPose(const int iFrm, const CameraPrior::Pose &Zp);
-  virtual void PushCameraPriorMotion(const int iFrm, const int iKF, const CameraPrior::Motion &Zp);
+                            const std::vector<Depth::InverseGaussian> &dzs
+#ifdef CFG_HANDLE_SCALE_JUMP
+                          , const float d
+#endif
+                          );
+  virtual void PushDeleteKeyFrame(const int iFrm, const int iKF);
+  virtual void PushDeleteMapPoints(const int iFrm, const std::vector<int> &ids);
+  virtual void PushUpdateCameras(const int iFrm, const std::vector<GlobalMap::InputCamera> &Cs);
+  virtual void PushCameraPriorPose(const int iFrm, const CameraPrior::Pose &IZp);
+  virtual void PushCameraPriorMotion(const int iFrm, const int iKF, const CameraPrior::Motion &IZp);
   virtual void Run();
   //virtual int GetTotalPoints(int *N = NULL);
   virtual float GetTotalTime(int *N = NULL);
@@ -124,10 +139,10 @@ class GlobalBundleAdjustor : public MT::Thread {
 
   class KeyFrame : public GlobalMap::KeyFrameBA {
    public:
-    inline KeyFrame() : GlobalMap::KeyFrameBA() {}
+    inline KeyFrame() : KeyFrameBA() {}
     inline KeyFrame(const KeyFrame &KF) { *this = KF; }
     inline void operator = (const KeyFrame &KF) {
-      *((GlobalMap::KeyFrameBA *) this) = KF;
+      *((KeyFrameBA *) this) = KF;
       m_us.Set(KF.m_us);
       m_Axs.Set(KF.m_Axs);
       m_Mxs1.Set(KF.m_Mxs1);
@@ -146,7 +161,7 @@ class GlobalBundleAdjustor : public MT::Thread {
       m_SAps.Set(KF.m_SAps);
     }
     inline void Initialize(const InputKeyFrame &IKF) {
-      GlobalMap::KeyFrameBA::Initialize(IKF);
+      KeyFrameBA::Initialize(IKF);
       m_us.Set(IKF.m_us);
       const int Nz = static_cast<int>(m_zs.size()), NZ = static_cast<int>(m_Zs.size());
       m_Lzs.Resize(Nz);     m_Lzs.MakeZero();
@@ -163,11 +178,11 @@ class GlobalBundleAdjustor : public MT::Thread {
       m_SAps.Resize(0);
     }
     inline void PushFeatures(const std::vector<FTR::Source> &xs) {
-      GlobalMap::KeyFrameBA::PushFeatures(xs);
-      const int ix = m_Axs.Size(), Nx = static_cast<int>(m_xs.size());
-      m_Axs.Resize(Nx, true);   m_Axs.MakeZero(ix, Nx);
-      m_Mxs1.Resize(Nx, true);  m_Mxs1.MakeZero(ix, Nx);
-      m_Mxs2.Resize(Nx, true);  m_Mxs2.MakeZero(ix, Nx);
+      KeyFrameBA::PushFeatures(xs);
+      const int ix = m_Axs.Size(), Nx = static_cast<int>(xs.size());
+      m_Axs.InsertZero(ix, Nx, NULL);
+      m_Mxs1.InsertZero(ix, Nx, NULL);
+      m_Mxs2.InsertZero(ix, Nx, NULL);
 #ifdef CFG_DEBUG
       for (int jx = ix; jx < Nx; ++jx) {
         m_Mxs1[jx].m_mdx.Invalidate();
@@ -175,19 +190,21 @@ class GlobalBundleAdjustor : public MT::Thread {
       }
 #endif
     }
-    inline void PushFeatureMeasurement(const int iKF, const int ix, const FTR::Measurement &z,
-                                       int *ik, int *iz) {
+    inline void PushFeatureMeasurements(const int iKF, const std::vector<FTR::Measurement> &zs,
+                                        int *ik, int *iz, AlignedVector<float> *work) {
       int iZ;
-      GlobalMap::KeyFrameBA::PushFeatureMeasurement(iKF, ix, z, &iZ, iz);
+      const int Nk = static_cast<int>(m_iKFsMatch.size());
+      KeyFrameBA::PushFeatureMeasurements(iKF, zs, &iZ, iz);
       *ik = m_Zs[iZ].m_ik;
-      m_Lzs.InsertZero(*iz);
-      m_Azs1.InsertZero(*iz);
-      m_Azs2.InsertZero(*iz);
-      m_Mzs1.InsertZero(*iz);
-      m_Mzs2.InsertZero(*iz);
+      const int Nz = static_cast<int>(zs.size());
+      m_Lzs.InsertZero(*iz, Nz, work);
+      m_Azs1.InsertZero(*iz, Nz, work);
+      m_Azs2.InsertZero(*iz, Nz, work);
+      m_Mzs1.InsertZero(*iz, Nz, work);
+      m_Mzs2.InsertZero(*iz, Nz, work);
       if (static_cast<int>(m_Zs.size()) > m_SAcxzs.Size()) {
         m_SAcxzs.InsertZero(iZ);
-        if (static_cast<int>(m_iKFsMatch.size()) > m_Zm.m_SMczms.Size()) {
+        if (static_cast<int>(m_iKFsMatch.size()) > Nk) {
           m_Zm.InsertKeyFrame(*ik);
           m_ikp2KF.insert(m_ikp2KF.begin() + *ik, iKF);
           const int Np = static_cast<int>(m_iKFsPrior.size());
@@ -198,7 +215,6 @@ class GlobalBundleAdjustor : public MT::Thread {
           }
         }
       }
-      m_Zm.InsertFeatureMeasurement2(*ik, *iz);
     }
     inline void DeleteKeyFrame(const int iKF,
                                const std::vector<FRM::Measurement>::iterator *iZ = NULL) {
@@ -253,10 +269,43 @@ class GlobalBundleAdjustor : public MT::Thread {
         }
         m_ikp2KF.erase(m_ikp2KF.begin() + ikp);
       }
-      GlobalMap::KeyFrameBA::DeleteKeyFrame(iKF, &_iZ, &ik);
+      KeyFrameBA::DeleteKeyFrame(iKF, &_iZ, &ik);
+    }
+    inline void DeleteFeatureMeasurements(const std::vector<int> &izs) {
+      const int Nz1 = static_cast<int>(m_zs.size());
+      KeyFrameBA::DeleteFeatureMeasurements(izs);
+      for (int iz1 = 0; iz1 < Nz1; ++iz1) {
+        const int iz2 = izs[iz1];
+        if (iz2 < 0) {
+          continue;
+        }
+        m_Lzs[iz2] = m_Lzs[iz1];
+        m_Azs1[iz2] = m_Azs1[iz1];
+        m_Azs2[iz2] = m_Azs2[iz1];
+        m_Mzs1[iz2] = m_Mzs1[iz1];
+        m_Mzs2[iz2] = m_Mzs2[iz1];
+      }
+      const int Nz2 = static_cast<int>(m_zs.size());
+      m_Lzs.Resize(Nz2);
+      m_Azs1.Resize(Nz2);
+      m_Azs2.Resize(Nz2);
+      m_Mzs1.Resize(Nz2);
+      m_Mzs2.Resize(Nz2);
+    }
+    inline void InvalidateFeatures(const ubyte *mxs) {
+      KeyFrameBA::InvalidateFeatures(mxs);
+      const int Nx = static_cast<int>(m_xs.size());
+      for (int ix = 0, cnt = 0; ix < Nx; ++ix) {
+        if (!mxs[ix]) {
+          continue;
+        }
+        m_Axs[ix].MakeZero();
+        m_Mxs1[ix].MakeZero();
+        m_Mxs2[ix].MakeZero();
+      }
     }
     inline void MakeZero() {
-      GlobalMap::KeyFrameBA::MakeZero();
+      KeyFrameBA::MakeZero();
       m_Axs.MakeZero();
       m_Mxs1.MakeZero();
       m_Mxs2.MakeZero();
@@ -287,7 +336,7 @@ class GlobalBundleAdjustor : public MT::Thread {
         }
       }
       const int jk = static_cast<int>(_ik - m_iKFsMatch.begin());
-      GlobalMap::KeyFrameBA::InsertMatchKeyFrame(iKF, &_ik);
+      KeyFrameBA::InsertMatchKeyFrame(iKF, &_ik);
       m_Zm.InsertKeyFrame(jk);
       m_ikp2KF.insert(m_ikp2KF.begin() + jk, iKF);
       const int Np = static_cast<int>(m_iKFsPrior.size());
@@ -298,12 +347,14 @@ class GlobalBundleAdjustor : public MT::Thread {
       }
     }
     inline int PushCameraPrior(const int iKF, AlignedVector<float> *work) {
-      const std::vector<int>::iterator ip = std::lower_bound(m_iKFsPrior.begin(), m_iKFsPrior.end(), iKF);
+      const std::vector<int>::iterator ip = std::lower_bound(m_iKFsPrior.begin(),
+                                                             m_iKFsPrior.end(), iKF);
       if (ip != m_iKFsPrior.end() && *ip == iKF) {
         return -1;
       }
       int _ip;
-      const int ik = SearchMatchKeyFrame(iKF), ikp = ik == -1 ? int(m_ikp2KF.size()) : ik;
+      const int ik = SearchMatchKeyFrame(iKF);
+      const int ikp = ik == -1 ? static_cast<int>(m_ikp2KF.size()) : ik;
       if (ip == m_iKFsPrior.end()) {
         _ip = int(m_iKFsPrior.size());
         m_iKFsPrior.push_back(iKF);
@@ -327,7 +378,7 @@ class GlobalBundleAdjustor : public MT::Thread {
       return (ip == m_iKFsPrior.end() || *ip != iKF) ? -1 : int(ip - m_iKFsPrior.begin());
     }
     inline void SaveB(FILE *fp) const {
-      GlobalMap::KeyFrameBA::SaveB(fp);
+      KeyFrameBA::SaveB(fp);
       m_us.SaveB(fp);
       m_Axs.SaveB(fp);
       m_Mxs1.SaveB(fp);
@@ -345,7 +396,7 @@ class GlobalBundleAdjustor : public MT::Thread {
       m_SAps.SaveB(fp);
     }
     inline void LoadB(FILE *fp) {
-      GlobalMap::KeyFrameBA::LoadB(fp);
+      KeyFrameBA::LoadB(fp);
       m_us.LoadB(fp);
       m_Axs.LoadB(fp);
       m_Mxs1.LoadB(fp);
@@ -363,33 +414,35 @@ class GlobalBundleAdjustor : public MT::Thread {
       m_SAps.LoadB(fp);
     }
     inline void AssertConsistency(const int iKF) const {
-      GlobalMap::KeyFrameBA::AssertConsistency(iKF);
-      UT_ASSERT(m_iKFsMatch.empty() || m_iKFsMatch.back() < iKF);
-      UT_ASSERT(m_iKFsPrior.empty() || m_iKFsPrior.back() < iKF);
-
+      KeyFrameBA::AssertConsistency(iKF);
       const int Nx = static_cast<int>(m_xs.size());
       UT_ASSERT(m_Axs.Size() == Nx && m_Mxs1.Size() == Nx && m_Mxs2.Size() == Nx);
-      const int Nz = int(m_zs.size());
+      const int Nz = static_cast<int>(m_zs.size());
       UT_ASSERT(m_Lzs.Size() == Nz);
       UT_ASSERT(m_Azs1.Size() == Nz && m_Azs2.Size() == Nz);
       UT_ASSERT(m_Mzs1.Size() == Nz && m_Mzs2.Size() == Nz);
 #ifdef CFG_STEREO
-      for (int iz = 0; iz < Nz; ++iz)
+      for (int iz = 0; iz < Nz; ++iz) {
         UT_ASSERT(m_Lzs[iz].m_Je.Valid() || m_Lzs[iz].m_Jer.Valid());
+      }
 #endif
       UT_ASSERT(m_SAcxzs.Size() == static_cast<int>(m_Zs.size()));
-      m_Zm.AssertConsistency(static_cast<int>(m_iKFsMatch.size()));
-      const int Np = int(std::lower_bound(m_iKFsPrior.begin(), m_iKFsPrior.end(), iKF) -
-                                          m_iKFsPrior.begin());
+      //UT_ASSERT(m_iKFsMatch.empty() || m_iKFsMatch.back() < iKF);
+      //UT_ASSERT(m_iKFsPrior.empty() || m_iKFsPrior.back() < iKF);
+      const int Nk = static_cast<int>(std::lower_bound(m_iKFsMatch.begin(),
+                                                       m_iKFsMatch.end(), iKF) -
+                                                       m_iKFsMatch.begin());
+      const int Np = static_cast<int>(std::lower_bound(m_iKFsPrior.begin(),
+                                                       m_iKFsPrior.end(), iKF) -
+                                                       m_iKFsPrior.begin());
+      //m_Zm.AssertConsistency(static_cast<int>(m_iKFsMatch.size()));
+      m_Zm.AssertConsistency(Nk);
       UT_ASSERT(static_cast<int>(m_iAp2kp.size()) == Np);
       UT_ASSERT(m_SAps.Size() == Np);
       const int _Np = static_cast<int>(m_iKFsPrior.size());
       for (int ip = 1; ip < _Np; ++ip) {
         UT_ASSERT(m_iKFsPrior[ip - 1] < m_iKFsPrior[ip]);
       }
-      const int Nk = static_cast<int>(std::lower_bound(m_iKFsMatch.begin(),
-                                                       m_iKFsMatch.end(), iKF) -
-                                                       m_iKFsMatch.begin());
       for (int ik = 0; ik < Nk; ++ik) {
         UT_ASSERT(m_iKFsMatch[ik] == m_ikp2KF[ik]);
       }
@@ -449,8 +502,8 @@ class GlobalBundleAdjustor : public MT::Thread {
     int m_iKF;
   };
 
-  enum TimerType { TM_TOTAL, TM_FACTOR, TM_SCHUR_COMPLEMENT, TM_CAMERA, TM_DEPTH, TM_UPDATE,
-                   TM_TEST_1, TM_TEST_2, TM_TEST_3, TM_TEST_4, TM_TEST_5, TM_TYPES };
+  enum TimerType { TM_TOTAL, TM_SYNCHRONIZE, TM_FACTOR, TM_SCHUR_COMPLEMENT, TM_CAMERA, TM_DEPTH,
+                   TM_UPDATE, TM_TYPES };
   class ES {
    public:
     inline float Total() const {
@@ -514,7 +567,13 @@ class GlobalBundleAdjustor : public MT::Thread {
   virtual void SynchronizeData();
   virtual void UpdateData();
   virtual bool BufferDataEmpty();
-
+  
+  virtual void PushKeyFrame(const InputKeyFrame &IKF);
+  virtual void DeleteKeyFrame(const int iKF);
+  virtual void DeleteMapPoints(const std::vector<int> &ids);
+  virtual void UpdateCameras(const std::vector<GlobalMap::InputCamera> &Cs);
+  virtual void PushCameraPriorPose(const CameraPrior::Pose &Zp);
+  virtual void SetCameraPriorMotion(const CameraPriorMotion &Zp);
   virtual void PushFeatureMeasurementMatchesFirst(const FRM::Frame &F, std::vector<int> &iKF2X,
                                                   std::vector<int> &iX2z);
   virtual void PushFeatureMeasurementMatchesNext(const FRM::Frame &F1, const FRM::Frame &F2,
@@ -594,6 +653,7 @@ class GlobalBundleAdjustor : public MT::Thread {
                                             PCG_TYPE *Se2, PCG_TYPE *e2Max);
   virtual void ConvertDepthUpdates(const float *xs, LA::AlignedVectorXf *xds);
   virtual void PushDepthUpdates(const LA::AlignedVectorXf &xds, LA::AlignedVectorXf *xs);
+  virtual float AverageDepths(const Depth::InverseGaussian *ds, const int N);
 
   virtual float PrintErrorStatistic(const std::string str, const AlignedVector<Rigid3D> &Cs,
                                     const AlignedVector<Camera> &CsLM,
@@ -658,7 +718,8 @@ class GlobalBundleAdjustor : public MT::Thread {
 
  protected:
    
-  friend IBA::Solver;
+  friend class IBA::Solver;
+  friend class IBA::Internal;
   friend class LocalBundleAdjustor;
   friend class ViewerIBA;
 
@@ -671,13 +732,20 @@ class GlobalBundleAdjustor : public MT::Thread {
   const Camera *m_CsGT;
   std::string m_dir;
 
+  enum InputType { IT_KEY_FRAME, IT_DELETE_KEY_FRAME, IT_DELETE_MAP_POINTS, IT_UPDATE_CAMERAS,
+                   IT_CAMERA_PRIOR_POSE, IT_CAMERA_PRIOR_MOTION };
+  std::list<InputType> m_ITs1, m_ITs2;
   std::list<InputKeyFrame> m_IKFs1, m_IKFs2;
-  std::vector<InputCamera> m_ICs1, m_ICs2;
+  std::list<int> m_IDKFs1, m_IDKFs2;
+  std::list<std::vector<int> > m_IDMPs1, m_IDMPs2;
+  std::list<std::vector<GlobalMap::InputCamera> > m_IUCs1, m_IUCs2;
   std::list<CameraPrior::Pose> m_IZps1, m_IZps2;
   CameraPriorMotion m_IZpLM1, m_IZpLM2;
 
   Timer m_ts[TM_TYPES];
+#ifdef CFG_HISTORY
   std::vector<History> m_hists;
+#endif
   std::vector<HistoryCamera> m_CsDel;
 
   int m_iIter, m_iIterPCG, m_iIterDL;
@@ -691,6 +759,7 @@ class GlobalBundleAdjustor : public MT::Thread {
   CameraPrior::Motion::Factor m_ApLM;
 
   std::vector<KeyFrame> m_KFs;
+  std::vector<int> m_iFrms;
   AlignedVector<Rigid3D> m_Cs;
   AlignedVector<Camera> m_CsLM;
 #ifdef CFG_GROUND_TRUTH
@@ -700,6 +769,9 @@ class GlobalBundleAdjustor : public MT::Thread {
   std::vector<ubyte> m_ucs, m_ucmsLM;
 #ifdef CFG_GROUND_TRUTH
   std::vector<ubyte> m_ucsGT;
+#endif
+#ifdef CFG_HANDLE_SCALE_JUMP
+  std::vector<float> m_dsKF;
 #endif
 #ifdef CFG_INCREMENTAL_PCG
   AlignedVector<LA::Vector6f> m_xcs;
@@ -769,10 +841,13 @@ class GlobalBundleAdjustor : public MT::Thread {
   AlignedVector<LA::AlignedVector3f> m_t12s;
   std::vector<Depth::Measurement> m_zds;
 
-  std::vector<ubyte> m_marksTmp;
+  std::vector<ubyte> m_marksTmp1, m_marksTmp2, m_marksTmp3;
   std::vector<int> m_idxsTmp1, m_idxsTmp2, m_idxsTmp3;
+  std::vector<std::vector<int> > m_idxsListTmp;
   std::vector<std::vector<FRM::Measurement>::iterator> m_iKF2Z;
   std::vector<FTR::Source> m_xsTmp;
+  std::vector<FTR::Measurement> m_zsTmp;
+  std::vector<std::vector<FTR::Measurement> > m_zsListTmp;
   std::vector<FTR::Measurement::Match> m_izmsTmp;
   AlignedVector<LA::ProductVector6f> m_adczsTmp;
   CameraPrior::Matrix::CC m_ApTmp;

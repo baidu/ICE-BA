@@ -28,58 +28,80 @@ template<typename TYPE> inline bool DecomposeLDL(const int N, TYPE **A, const TY
       memset(ai + i, 0, sizeof(TYPE) * (N - i));
       return false;
     }
-    memcpy(at, ai + i + 1, sizeof(TYPE) * (N - i - 1));
     const TYPE mii = 1 / aii;
     ai[i] = mii;
+    memcpy(at, ai + i + 1, sizeof(TYPE) * (N - i - 1));
     for (int k = i + 1; k < N; ++k) {
       ai[k] *= mii;
     }
     for (int j = i + 1; j < N; ++j) {
-      TYPE *aj = A[j];
       const TYPE aij = at[j - i - 1];
+      TYPE *aj = A[j];
       for (int k = j; k < N; ++k) {
-        aj[k] = -aij * ai[k] + aj[k];
+        aj[k] -= aij * ai[k];
       }
     }
   }
   return true;
 }
 
-#if 0
-template<> inline bool DecomposeLDL<float>(const int N, float **A, const float *eps) {
-  std::vector<double> Ad(N * N);
-  std::vector<double *> _Ad(N);
-  for (int i = 0; i < N; ++i) {
-    _Ad[i] = i == 0 ? Ad.data() : _Ad[i - 1] + N;
-  }
-  for (int i = 0; i < N; ++i) {
-    const float *Ai = A[i];
-    double *Aid = _Ad[i];
-    for (int j = 0; j < N; ++j) {
-      Aid[j] = double(Ai[j]);
+template<typename TYPE> inline bool MarginalizeLDL(const int N, TYPE **A, TYPE *b,
+                                                   const int im, const int Nm,
+                                                   TYPE *work, const TYPE *eps = NULL) {
+  TYPE *at1 = work, *at2 = at1 + im;
+  const int _im = im + Nm;
+  bool scc = true;
+  for (int i = im; i < _im; ++i) {
+    TYPE *ai = A[i];
+    const TYPE aii = ai[i];
+    if ((eps && aii <= eps[i - im]) || (!eps && aii <= 0)) {
+      memset(ai + i, 0, sizeof(TYPE) * (N - i));
+      b[i] = 0;
+      //return false;
+      scc = false;
+      continue;
+    }
+    const TYPE mii = 1 / aii;
+    for (int j = 0; j < im; ++j) {
+      at1[j] = A[j][i];
+      A[j][i] *= mii;
+    }
+    //ai[i] = mii;
+    ai[i] = 1;
+    memcpy(at2, ai + i + 1, sizeof(TYPE) * (N - i - 1));
+    for (int k = i + 1; k < N; ++k) {
+      ai[k] *= mii;
+    }
+    b[i] *= mii;
+    const TYPE bi = b[i];
+    for (int j = 0; j < im; ++j) {
+      const TYPE aij = at1[j];
+      TYPE *aj = A[j];
+      for (int k = j; k < im; ++k) {
+        aj[k] -= aij * A[k][i];
+      }
+      for (int k = i + 1; k < N; ++k) {
+        aj[k] -= aij * ai[k];
+      }
+      b[j] -= aij * bi;
+    }
+    for (int j = i + 1; j < N; ++j) {
+      const TYPE aij = at2[j - i - 1];
+      TYPE *aj = A[j];
+      for (int k = j; k < N; ++k) {
+        aj[k] -= aij * ai[k];
+      }
+      b[j] -= aij * bi;
     }
   }
-  std::vector<double> epsd;
-  if (eps) {
-    epsd.resize(N);
-    for (int i = 0; i < N; ++i) {
-      epsd[i] = double(eps[i]);
-    }
-  }
-  const bool scc = DecomposeLDL<double>(N, _Ad.data(), eps ? epsd.data() : NULL);
-  for (int i = 0; i < N; ++i) {
-    const double *Aid = _Ad[i];
-    float *Ai = A[i];
-    for (int j = 0; j < N; ++j) {
-      Ai[j] = float(Aid[j]);
-    }
-  }
+  //return true;
   return scc;
 }
-#endif
 
-template<typename TYPE> inline int RankLDL(const int N, TYPE **A, const TYPE *eps = NULL) {
-  TYPE *at = A[N - 1];
+template<typename TYPE> inline int RankLDL(const int N, TYPE **A, TYPE *work,
+                                           const TYPE *eps/* = NULL*/) {
+  //TYPE *at = A[N - 1];
+  TYPE *at = work;
   for (int i = 0; i < N; ++i) {
     TYPE *ai = A[i];
     const TYPE aii = ai[i];

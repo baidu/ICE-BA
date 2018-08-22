@@ -37,16 +37,12 @@ class SIMD_ALIGN_DECLSPEC AlignedMatrixMxNf {
   inline       Row& operator() (const int i)       { return m_rows[i]; }
   inline const float* operator[] (const int i) const { return m_rows[i].m_data; }
   inline       float* operator[] (const int i)       { return m_rows[i].m_data; }
+  inline const float& operator() (const int i, const int j) const { return m_rows[i].m_data[j]; }
+  inline       float& operator() (const int i, const int j)       { return m_rows[i].m_data[j]; }
 
   //inline AlignedMatrixMxNf() {}
   //inline AlignedMatrixMxNf(const AlignedMatrixMxNf<M, N> &B) { *this = B; }
 
-  inline float& operator() (const int row, const int col) {
-    return m_rows[row][col];
-  }
-  inline const float& operator() (const int row, const int col) const {
-    return m_rows[row][col];
-  }
   inline void operator += (const AlignedMatrixMxNf<M, N> &B) {
     for (int i = 0; i < M; ++i)
       m_rows[i] += B.m_rows[i];
@@ -96,6 +92,14 @@ class SIMD_ALIGN_DECLSPEC AlignedMatrixMxNf {
     memcpy(m_rows[i].m_data + j, &B.m00(), 12);
     memcpy(m_rows[i + 1].m_data + j, &B.m10(), 12);
   }
+  inline void SetBlock(const int i, const int j, const Matrix2x3f &B) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 2 <= M);
+    UT_ASSERT(j >= 0 && j + 3 <= N);
+#endif
+    memcpy(m_rows[i].m_data + j, B[0], 12);
+    memcpy(m_rows[i + 1].m_data + j, B[1], 12);
+  }
   inline void SetBlock(const int i, const int j, const AlignedMatrix3x3f &B) {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 3 <= M);
@@ -104,6 +108,15 @@ class SIMD_ALIGN_DECLSPEC AlignedMatrixMxNf {
     memcpy(m_rows[i].m_data + j, &B.m00(), 12);
     memcpy(m_rows[i + 1].m_data + j, &B.m10(), 12);
     memcpy(m_rows[i + 2].m_data + j, &B.m20(), 12);
+  }
+  inline void SetBlock(const int i, const int j, const Matrix3x3f &B) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= M);
+    UT_ASSERT(j >= 0 && j + 3 <= N);
+#endif
+    memcpy(m_rows[i].m_data + j, B[0], 12);
+    memcpy(m_rows[i + 1].m_data + j, B[1], 12);
+    memcpy(m_rows[i + 2].m_data + j, B[2], 12);
   }
   inline void SetBlock(const int i, const int j, const AlignedVector3f &v) {
 #ifdef CFG_DEBUG
@@ -156,6 +169,23 @@ class SIMD_ALIGN_DECLSPEC AlignedMatrixMxNf {
     memcpy(&B.m00(), m_rows[i].m_data + j, 12);
     memcpy(&B.m10(), m_rows[i + 1].m_data + j, 12);
     memcpy(&B.m20(), m_rows[i + 2].m_data + j, 12);
+  }
+  inline void GetBlock(const int i, const int j, Matrix2x3f &B) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 2 <= M);
+    UT_ASSERT(j >= 0 && j + 3 <= N);
+#endif
+    memcpy(B[0], m_rows[i].m_data + j, 12);
+    memcpy(B[1], m_rows[i + 1].m_data + j, 12);
+  }
+  inline void GetBlock(const int i, const int j, Matrix3x3f &B) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= M);
+    UT_ASSERT(j >= 0 && j + 3 <= N);
+#endif
+    memcpy(B[0], m_rows[i].m_data + j, 12);
+    memcpy(B[1], m_rows[i + 1].m_data + j, 12);
+    memcpy(B[2], m_rows[i + 2].m_data + j, 12);
   }
   inline void GetBlock(const int i, const int j, AlignedMatrix6x6f &B) const {
 #ifdef CFG_DEBUG
@@ -288,7 +318,7 @@ class SIMD_ALIGN_DECLSPEC AlignedMatrixMxNf {
         if (e) {
           UT::Print("%e ", row[j]);
         } else {
-          UT::Print("%.4f ", row[j]);
+          UT::Print("%f ", row[j]);
         }
       }
       UT::Print("\n");
@@ -303,7 +333,7 @@ class SIMD_ALIGN_DECLSPEC AlignedMatrixMxNf {
         if (e) {
           UT::Print("%e ", row[j]);
         } else {
-          UT::Print("%.4f ", row[j]);
+          UT::Print("%f ", row[j]);
         }
       }
       UT::Print("\n");
@@ -394,8 +424,8 @@ class SIMD_ALIGN_DECLSPEC AlignedMatrixMxNf {
 
 class SIMD_ALIGN_DECLSPEC AlignedMatrix2x9f : public AlignedMatrixMxNf<2, 9> {
  public:
-  inline void Set(const LA::AlignedMatrix2x3f &M0, const LA::AlignedMatrix2x3f &M1,
-                  const LA::AlignedMatrix2x3f &M2) {
+  inline void Set(const AlignedMatrix2x3f &M0, const AlignedMatrix2x3f &M1,
+                  const AlignedMatrix2x3f &M2) {
     SetBlock(0, 0, M0);
     SetBlock(0, 3, M1);
     SetBlock(0, 6, M2);
@@ -803,13 +833,35 @@ class SIMD_ALIGN_DECLSPEC AlignedMatrix9x9f : public AlignedMatrixMxNf<9, 9> {
                   const AlignedMatrix3x3f *M2) {
     Set(M0[0], M0[1], M0[2], M1[0], M1[1], M1[2], M2[0], M2[1], M2[2]);
   }
+  inline void Set(const Matrix9x9d &M) {
+    AlignedMatrix9x9f &_M = *this;
+    for (int i = 0; i < 9; ++i) {
+      for (int j = 0; j < 9; ++j) {
+        _M[i][j] = static_cast<float>(M[i][j]);
+      }
+    }
+  }
+  inline void Get(Matrix9x9d &M) const {
+    const AlignedMatrix9x9f &_M = *this;
+    for (int i = 0; i < 9; ++i) {
+      for (int j = 0; j < 9; ++j) {
+        M[i][j] = static_cast<float>(_M[i][j]);
+      }
+    }
+  }
   inline void GetDiagonal(Vector9f &d) const {
     const AlignedMatrix9x9f &M = *this;
     d.v0() = M[0][0];   d.v1() = M[1][1];   d.v2() = M[2][2];
     d.v3() = M[3][3];   d.v4() = M[4][4];   d.v5() = M[5][5];
     d.v6() = M[6][6];   d.v7() = M[7][7];   d.v8() = M[8][8];
   }
-  inline void IncreaseDiagonal(const int i, const LA::SymmetricMatrix3x3f &D) {
+  inline void GetDiagonal(Vector3f &d0, Vector3f &d1, Vector3f &d2) const {
+    const AlignedMatrix9x9f &M = *this;
+    d0.v0() = M[0][0];  d0.v1() = M[1][1];  d0.v2() = M[2][2];
+    d1.v0() = M[3][3];  d1.v1() = M[4][4];  d1.v2() = M[5][5];
+    d2.v0() = M[6][6];  d2.v1() = M[7][7];  d2.v2() = M[8][8];
+  }
+  inline void IncreaseDiagonal(const int i, const SymmetricMatrix3x3f &D) {
     AlignedMatrixMxNf<9, 9>::IncreaseDiagonal(i, D);
   }
   inline void IncreaseDiagonal(const float d012, const float d345, const float d678) {
@@ -876,12 +928,20 @@ class SIMD_ALIGN_DECLSPEC AlignedMatrix9x9f : public AlignedMatrixMxNf<9, 9> {
                        const bool decomposed = false) {
     AlignedMatrix9x9f &A = *this;
     float* _A[9] = {A[0], A[1], A[2], A[3], A[4], A[5], A[6], A[7], A[8]};
-    return LS::SolveLDL<float>(9, _A, b, eps, decomposed);
+    return LS::SolveLDL(9, _A, &b.v0(), eps, decomposed);
   }
-  inline bool InverseLDL(const float *eps = NULL) { return InverseLDL(*this, eps); }
-  static inline bool InverseLDL(AlignedMatrix9x9f &A, const float *eps = NULL) {
+  inline int RankLDL(const float *eps = NULL) {
+    AlignedMatrix9x9f &A = *this;
     float* _A[9] = {A[0], A[1], A[2], A[3], A[4], A[5], A[6], A[7], A[8]};
-    if (LS::InverseLDL<float>(9, _A, eps)) {
+    return LS::RankLDL(9, _A, _A[8], eps);
+  }
+  inline bool InverseLDL(const float *eps = NULL, const bool decomposed = false) {
+    return InverseLDL(*this, eps, decomposed);
+  }
+  static inline bool InverseLDL(AlignedMatrix9x9f &A, const float *eps = NULL,
+                                const bool decomposed = false) {
+    float* _A[9] = {A[0], A[1], A[2], A[3], A[4], A[5], A[6], A[7], A[8]};
+    if (LS::InverseLDL<float>(9, _A, eps, decomposed)) {
       A.SetLowerFromUpper();
       return true;
     } else {
@@ -1071,11 +1131,18 @@ class SIMD_ALIGN_DECLSPEC AlignedMatrix12x12f : public AlignedMatrixMxNf<12, 12>
                      A[6], A[7], A[8], A[9], A[10], A[11]};
     return LS::DecomposeLDL(12, _A, eps);
   }
+  inline bool SolveLDL(AlignedVector12f &b, const float *eps = NULL,
+                       const bool decomposed = false) {
+    AlignedMatrix12x12f &A = *this;
+    float *_A[12] = {A[0], A[1], A[2], A[3], A[4], A[5],
+                     A[6], A[7], A[8], A[9], A[10], A[11]};
+    return LS::SolveLDL(12, _A, &b.v0(), eps, decomposed);
+  }
   inline int RankLDL(const float *eps = NULL) {
     AlignedMatrix12x12f &A = *this;
     float *_A[12] = {A[0], A[1], A[2], A[3], A[4], A[5],
                      A[6], A[7], A[8], A[9], A[10], A[11]};
-    return LS::RankLDL(12, _A, eps);
+    return LS::RankLDL(12, _A, _A[11], eps);
   }
   static inline void Ab(const AlignedMatrix12x12f &A, AlignedVector12f &b, AlignedVector12f &Ab) {
     float *_Ab = Ab;
@@ -1663,7 +1730,7 @@ class SIMD_ALIGN_DECLSPEC AlignedMatrixNx3f : public AlignedMatrixMxNf<N, 3> {
     }
   }
   static inline void ABTToUpper(const AlignedMatrixNx3f<N> &A, const AlignedMatrixNx3f<N> &B0,
-                                const LA::AlignedVector3f &B1, MatrixMxNf < N, N + 1 > &ABT) {
+                                const AlignedVector3f &B1, MatrixMxNf < N, N + 1 > &ABT) {
     for (int i = 0; i < N; ++i) {
       const xp128f &a = A(i).m_data4[0];
       for (int j = i; j < N; ++j)
@@ -1731,11 +1798,19 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
   }
   inline void operator *= (const xp128f &s) { Scale(s); }
   inline AlignedMatrixXf operator - (const AlignedMatrixXf &B) const {
-    AlignedMatrixXf AmB;
-    AmB.Resize(m_Nr, m_Nc);
     const AlignedMatrixXf &A = *this;
-    for (int i = 0; i < m_Nr; ++i) {
-      SIMD::Subtract(m_Nc, A[i], B[i], AmB[i]);
+#ifdef CFG_DEBUG
+    UT_ASSERT(A.GetRows() == B.GetRows() && A.GetColumns() == B.GetColumns());
+    UT_ASSERT(A.Symmetric() == B.Symmetric());
+#endif
+    AlignedMatrixXf AmB;
+    AmB.Resize(m_Nr, m_Nc, m_symmetric);
+    if (m_symmetric) {
+      SIMD::Subtract((m_Nc * (m_Nc + 1)) >> 1, A.Data(), B.Data(), AmB.Data());
+    } else {
+      for (int i = 0; i < m_Nr; ++i) {
+        SIMD::Subtract(m_Nc, A[i], B[i], AmB[i]);
+      }
     }
     return AmB;
   }
@@ -1756,6 +1831,15 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
     }
   }
 
+  inline void SetBlockDiagonal(const int i, const int N, const float m) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + N <= m_Nr && i + N <= m_Nc);
+#endif
+    const int i2 = i + N;
+    for (int _i = i; _i < i2; ++_i) {
+      m_rows[_i][_i] = m;
+    }
+  }
   inline void SetBlockDiagonal(const int i, const SymmetricMatrix2x2f &M) {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 2 <= m_Nr && i + 2 <= m_Nc);
@@ -1777,30 +1861,24 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
     m_rows[k][k] = M.m55();
   }
 
-  inline void SetBlock(const int i, const int j, const AlignedMatrixXf &M) {
+  inline void SetBlock(const int i, const int j, const Matrix2x3f &M) {
 #ifdef CFG_DEBUG
-    UT_ASSERT(i >= 0 && i + M.GetRows() <= m_Nr);
-    UT_ASSERT(j >= 0 && j + M.GetColumns() <= m_Nc);
-#endif
-    const int N = sizeof(float) * M.m_Nc;
-    for (int k = 0; k < M.m_Nr; ++k) {
-      memcpy(m_rows[i + k] + j, M[k], N);
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
     }
-  }
-  inline void SetBlock(const int i, const int j, const AlignedVectorXf &V) {
-#ifdef CFG_DEBUG
-    UT_ASSERT(i >= 0 && i + V.Size() <= m_Nr);
-    UT_ASSERT(j >= 0 && j < m_Nc);
 #endif
-    const int N = V.Size();
-    for (int k = 0; k < N; ++k) {
-      m_rows[i + k][j] = V[k];
-    }
+    memcpy(m_rows[i] + j, M[0], 12);
+    memcpy(m_rows[i + 1] + j, M[1], 12);
   }
   inline void SetBlock(const int i, const int j, const AlignedMatrix2x6f &M) {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
     UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
     memcpy(m_rows[i] + j, M[0], 24);
     memcpy(m_rows[i + 1] + j, M[1], 24);
@@ -1809,48 +1887,95 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
     UT_ASSERT(j >= 0 && j + 9 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
     memcpy(m_rows[i] + j, M[0], 36);
     memcpy(m_rows[i + 1] + j, M[1], 36);
+  }
+  inline void SetBlock(const int i, const int j, const Matrix3x2f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 2 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    memcpy(m_rows[i] + j, M[0], 8);
+    memcpy(m_rows[i + 1] + j, M[1], 8);
+    memcpy(m_rows[i + 2] + j, M[2], 8);
   }
   inline void SetBlock(const int i, const int j, const AlignedMatrix3x3f &M) {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
     UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
-    memcpy(m_rows[i] + j, &M.m00(), 12);
-    memcpy(m_rows[i + 1] + j, &M.m10(), 12);
-    memcpy(m_rows[i + 2] + j, &M.m20(), 12);
+    if (m_symmetric && i == j) {
+      int k = j;
+      memcpy(m_rows[i] + k++, &M.m00(), 12);
+      memcpy(m_rows[i + 1] + k++, &M.m11(), 8);
+      m_rows[k][k] = M.m22();
+    } else {
+      memcpy(m_rows[i] + j, &M.m00(), 12);
+      memcpy(m_rows[i + 1] + j, &M.m10(), 12);
+      memcpy(m_rows[i + 2] + j, &M.m20(), 12);
+    }
   }
-  inline void SetBlock(const int i, const int j, const SymmetricMatrix6x6f &M) {
+  inline void SetBlock(const int i, const int j, const Matrix3x3f &M) {
 #ifdef CFG_DEBUG
-    UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
-    UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
-    int k = j;
-    memcpy(m_rows[i] + k++, &M.m00(), 24);
-    memcpy(m_rows[i + 1] + k++, &M.m11(), 20);
-    memcpy(m_rows[i + 2] + k++, &M.m22(), 16);
-    memcpy(m_rows[i + 3] + k++, &M.m33(), 12);
-    memcpy(m_rows[i + 4] + k++, &M.m44(), 8);
-    m_rows[i + 5][k] = M.m55();
+    if (m_symmetric && i == j) {
+      int k = j;
+      memcpy(m_rows[i] + k++, M[0], 12);
+      memcpy(m_rows[i + 1] + k++, M[1] + 1, 8);
+      m_rows[k][k] = M[2][2];
+    } else {
+      memcpy(m_rows[i] + j, M[0], 12);
+      memcpy(m_rows[i + 1] + j, M[1], 12);
+      memcpy(m_rows[i + 2] + j, M[2], 12);
+    }
   }
   inline void SetBlock(const int i, const int j, const AlignedMatrix6x6f &M) {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
     UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
-    memcpy(m_rows[i] + j, M[0], 24);
-    memcpy(m_rows[i + 1] + j, M[1], 24);
-    memcpy(m_rows[i + 2] + j, M[2], 24);
-    memcpy(m_rows[i + 3] + j, M[3], 24);
-    memcpy(m_rows[i + 4] + j, M[4], 24);
-    memcpy(m_rows[i + 5] + j, M[5], 24);
+    if (m_symmetric && i == j) {
+      int k = j;
+      memcpy(m_rows[i] + k++, &M[0][0], 24);
+      memcpy(m_rows[i + 1] + k++, &M[1][1], 20);
+      memcpy(m_rows[i + 2] + k++, &M[2][2], 16);
+      memcpy(m_rows[i + 3] + k++, &M[3][3], 12);
+      memcpy(m_rows[i + 4] + k++, &M[4][4], 8);
+      m_rows[k][k] = M[5][5];
+    } else {
+      memcpy(m_rows[i] + j, M[0], 24);
+      memcpy(m_rows[i + 1] + j, M[1], 24);
+      memcpy(m_rows[i + 2] + j, M[2], 24);
+      memcpy(m_rows[i + 3] + j, M[3], 24);
+      memcpy(m_rows[i + 4] + j, M[4], 24);
+      memcpy(m_rows[i + 5] + j, M[5], 24);
+    }
   }
   inline void SetBlock(const int i, const int j, const AlignedMatrix6x9f &M) {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
     UT_ASSERT(j >= 0 && j + 9 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
     memcpy(m_rows[i] + j, M[0], 36);
     memcpy(m_rows[i + 1] + j, M[1], 36);
@@ -1863,6 +1988,9 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 9 <= m_Nr);
     UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
     memcpy(m_rows[i] + j, M[0], 12);
     memcpy(m_rows[i + 1] + j, M[1], 12);
@@ -1878,6 +2006,9 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 9 <= m_Nr);
     UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
     memcpy(m_rows[i] + j, M[0], 24);
     memcpy(m_rows[i + 1] + j, M[1], 24);
@@ -1889,41 +2020,68 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
     memcpy(m_rows[i + 7] + j, M[7], 24);
     memcpy(m_rows[i + 8] + j, M[8], 24);
   }
-  inline void SetBlock(const int i, const int j, const SymmetricMatrix9x9f &M) {
-#ifdef CFG_DEBUG
-    UT_ASSERT(i >= 0 && i + 9 <= m_Nr);
-    UT_ASSERT(j >= 0 && j + 9 <= m_Nc);
-#endif
-    int k = j;
-    memcpy(m_rows[i] + k++, &M.m00(), 36);
-    memcpy(m_rows[i + 1] + k++, &M.m11(), 32);
-    memcpy(m_rows[i + 2] + k++, &M.m22(), 28);
-    memcpy(m_rows[i + 3] + k++, &M.m33(), 24);
-    memcpy(m_rows[i + 4] + k++, &M.m44(), 20);
-    memcpy(m_rows[i + 5] + k++, &M.m55(), 16);
-    memcpy(m_rows[i + 6] + k++, &M.m66(), 12);
-    memcpy(m_rows[i + 7] + k++, &M.m77(), 8);
-    m_rows[i + 8][k] = M.m88();
-  }
   inline void SetBlock(const int i, const int j, const AlignedMatrix9x9f &M) {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 9 <= m_Nr);
     UT_ASSERT(j >= 0 && j + 9 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
-    memcpy(m_rows[i] + j, M[0], 36);
-    memcpy(m_rows[i + 1] + j, M[1], 36);
-    memcpy(m_rows[i + 2] + j, M[2], 36);
-    memcpy(m_rows[i + 3] + j, M[3], 36);
-    memcpy(m_rows[i + 4] + j, M[4], 36);
-    memcpy(m_rows[i + 5] + j, M[5], 36);
-    memcpy(m_rows[i + 6] + j, M[6], 36);
-    memcpy(m_rows[i + 7] + j, M[7], 36);
-    memcpy(m_rows[i + 8] + j, M[8], 36);
+    if (m_symmetric && i == j) {
+      int k = j;
+      memcpy(m_rows[i] + k++, &M[0][0], 36);
+      memcpy(m_rows[i + 1] + k++, &M[1][1], 32);
+      memcpy(m_rows[i + 2] + k++, &M[2][2], 28);
+      memcpy(m_rows[i + 3] + k++, &M[3][2], 24);
+      memcpy(m_rows[i + 4] + k++, &M[4][3], 20);
+      memcpy(m_rows[i + 5] + k++, &M[5][4], 16);
+      memcpy(m_rows[i + 6] + k++, &M[6][5], 12);
+      memcpy(m_rows[i + 7] + k++, &M[7][6], 8);
+      m_rows[k][k] = M[8][8];
+    } else {
+      memcpy(m_rows[i] + j, M[0], 36);
+      memcpy(m_rows[i + 1] + j, M[1], 36);
+      memcpy(m_rows[i + 2] + j, M[2], 36);
+      memcpy(m_rows[i + 3] + j, M[3], 36);
+      memcpy(m_rows[i + 4] + j, M[4], 36);
+      memcpy(m_rows[i + 5] + j, M[5], 36);
+      memcpy(m_rows[i + 6] + j, M[6], 36);
+      memcpy(m_rows[i + 7] + j, M[7], 36);
+      memcpy(m_rows[i + 8] + j, M[8], 36);
+    }
+  }
+  inline void SetBlock(const int i, const int j, const AlignedMatrixXf &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + M.m_Nr <= m_Nr);
+    UT_ASSERT(j >= 0 && j + M.m_Nc <= m_Nc);
+    UT_ASSERT(m_symmetric == M.m_symmetric);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    if (m_symmetric && i == j) {
+      size_t size = sizeof(float) * M.m_Nc;
+      for (int k = 0; k < M.m_Nr; ++k, size -= sizeof(float)) {
+        memcpy(m_rows[i + k] + j + k, M[k] + k, size);
+      }
+    } else {
+#ifdef CFG_DEBUG
+      UT_ASSERT(!M.m_symmetric);
+#endif
+      const size_t size = sizeof(float) * M.m_Nc;
+      for (int k = 0; k < M.m_Nr; ++k) {
+        memcpy(m_rows[i + k] + j, M[k], size);
+      }
+    }
   }
   inline void SetBlock(const int i, const int j, const Vector6f &v) {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
     UT_ASSERT(j >= 0 && j < m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
     m_rows[i][j] = v.v0();
     m_rows[i + 1][j] = v.v1();
@@ -1936,6 +2094,9 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 9 <= m_Nr);
     UT_ASSERT(j >= 0 && j < m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
     m_rows[i][j] = v.v0();
     m_rows[i + 1][j] = v.v1();
@@ -1946,6 +2107,19 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
     m_rows[i + 6][j] = v.v6();
     m_rows[i + 7][j] = v.v7();
     m_rows[i + 8][j] = v.v8();
+  }
+  inline void SetBlock(const int i, const int j, const AlignedVectorXf &V) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + V.Size() <= m_Nr);
+    UT_ASSERT(j >= 0 && j < m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const int N = V.Size();
+    for (int k = 0; k < N; ++k) {
+      m_rows[i + k][j] = V[k];
+    }
   }
   
   inline void GetBlockDiagonal(const int i, SymmetricMatrix2x2f &M) const {
@@ -1977,72 +2151,178 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
     memcpy(&M.m44(), m_rows[k] + k, 8);   ++k;
     M.m55() = m_rows[k][k];
   }
-  inline void GetBlockDiagonal(const int i, AlignedMatrix6x6f &M) const {
+  inline void GetBlock(const int i, const int j, Matrix2x3f &M) const {
 #ifdef CFG_DEBUG
-    UT_ASSERT(i >= 0 && i + 6 <= m_Nr && i + 6 <= m_Nc);
-#endif
-    for (int k = 0; k < 6; ++k) {
-      memcpy(M[k], m_rows[i + k] + i, 24);
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
     }
+#endif
+    memcpy(M[0], m_rows[i] + j, 12);
+    memcpy(M[1], m_rows[i + 1] + j, 12);
   }
-  inline void GetBlock(const int i, const int j, AlignedMatrixXf &M) const {
+  inline void GetBlock(const int i, const int j, AlignedMatrix2x6f &M) const {
 #ifdef CFG_DEBUG
-    UT_ASSERT(i >= 0 && i + M.GetRows() <= m_Nr);
-    UT_ASSERT(j >= 0 && j + M.GetColumns() <= m_Nc);
-#endif
-    const int N = sizeof(float) * M.m_Nc;
-    for (int k = 0; k < M.m_Nr; ++k) {
-      memcpy(M[k], m_rows[i + k] + j, N);
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
     }
+#endif
+    memcpy(M[0], m_rows[i] + j, 24);
+    memcpy(M[1], m_rows[i + 1] + j, 24);
   }
-  inline void GetBlock(const int i, const int j, AlignedVectorXf &V) const {
+  inline void GetBlock(const int i, const int j, AlignedMatrix2x9f &M) const {
 #ifdef CFG_DEBUG
-    UT_ASSERT(i >= 0 && i + V.Size() <= m_Nr);
-    UT_ASSERT(j >= 0 && j < m_Nc);
-#endif
-    const int N = V.Size();
-    for (int k = 0; k < N; ++k) {
-      V[k] = m_rows[i + k][j];
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 9 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
     }
+#endif
+    memcpy(M[0], m_rows[i] + j, 36);
+    memcpy(M[1], m_rows[i + 1] + j, 36);
+  }
+  inline void GetBlock(const int i, const int j, Matrix3x2f &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 2 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    memcpy(M[0], m_rows[i] + j, 8);
+    memcpy(M[1], m_rows[i + 1] + j, 8);
+    memcpy(M[2], m_rows[i + 2] + j, 8);
   }
   inline void GetBlock(const int i, const int j, AlignedMatrix3x3f &M) const {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
     UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
-    memcpy(&M.m00(), m_rows[i] + j, 12);
-    memcpy(&M.m10(), m_rows[i + 1] + j, 12);
-    memcpy(&M.m20(), m_rows[i + 2] + j, 12);
+    if (m_symmetric && i == j) {
+      int k = j;
+      memcpy(&M.m00(), m_rows[i] + k++, 12);
+      memcpy(&M.m11(), m_rows[i + 1] + k++, 8);
+      M.m22() = m_rows[k][k];
+      M.SetLowerFromUpper();
+    } else {
+      memcpy(&M.m00(), m_rows[i] + j, 12);
+      memcpy(&M.m10(), m_rows[i + 1] + j, 12);
+      memcpy(&M.m20(), m_rows[i + 2] + j, 12);
+    }
   }
-  inline void GetBlock(const int i, const int j, SymmetricMatrix6x6f &M) const {
+  inline void GetBlock(const int i, const int j, Matrix3x3f &M) const {
 #ifdef CFG_DEBUG
-    UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
-    UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
-    int k = j;
-    memcpy(&M.m00(), m_rows[i] + k++, 24);
-    memcpy(&M.m11(), m_rows[i + 1] + k++, 20);
-    memcpy(&M.m22(), m_rows[i + 2] + k++, 16);
-    memcpy(&M.m33(), m_rows[i + 3] + k++, 12);
-    memcpy(&M.m44(), m_rows[i + 4] + k++, 8);
-    M.m55() = m_rows[i + 5][k];
+    if (m_symmetric && i == j) {
+      int k = j;
+      memcpy(M[0], m_rows[i] + k++, 12);
+      memcpy(M[1] + 1, m_rows[i + 1] + k++, 8);
+      M[2][2] = m_rows[k][k];
+      M.SetLowerFromUpper();
+    } else {
+      memcpy(M[0], m_rows[i] + j, 12);
+      memcpy(M[1], m_rows[i + 1] + j, 12);
+      memcpy(M[2], m_rows[i + 2] + j, 12);
+    }
   }
   inline void GetBlock(const int i, const int j, AlignedMatrix6x6f &M) const {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
     UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
-    memcpy(M[0], m_rows[i] + j, 24);
-    memcpy(M[1], m_rows[i + 1] + j, 24);
-    memcpy(M[2], m_rows[i + 2] + j, 24);
-    memcpy(M[3], m_rows[i + 3] + j, 24);
-    memcpy(M[4], m_rows[i + 4] + j, 24);
-    memcpy(M[5], m_rows[i + 5] + j, 24);
+    if (m_symmetric && i == j) {
+      int k = j;
+      memcpy(&M[0][0], m_rows[i] + k++, 24);
+      memcpy(&M[1][1], m_rows[i + 1] + k++, 20);
+      memcpy(&M[2][2], m_rows[i + 2] + k++, 16);
+      memcpy(&M[3][3], m_rows[i + 3] + k++, 12);
+      memcpy(&M[4][4], m_rows[i + 4] + k++, 8);
+      M[5][5] = m_rows[k][k];
+      M.SetLowerFromUpper();
+    } else {
+      memcpy(M[0], m_rows[i] + j, 24);
+      memcpy(M[1], m_rows[i + 1] + j, 24);
+      memcpy(M[2], m_rows[i + 2] + j, 24);
+      memcpy(M[3], m_rows[i + 3] + j, 24);
+      memcpy(M[4], m_rows[i + 4] + j, 24);
+      memcpy(M[5], m_rows[i + 5] + j, 24);
+    }
+  }
+  inline void GetBlock(const int i, const int j, AlignedMatrix6x9f &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 9 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    memcpy(M[0], m_rows[i] + j, 36);
+    memcpy(M[1], m_rows[i + 1] + j, 36);
+    memcpy(M[2], m_rows[i + 2] + j, 36);
+    memcpy(M[3], m_rows[i + 3] + j, 36);
+    memcpy(M[4], m_rows[i + 4] + j, 36);
+    memcpy(M[5], m_rows[i + 5] + j, 36);
+  }
+  inline void GetBlock(const int i, const int j, AlignedMatrix9x9f &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 9 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 9 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    memcpy(M[0], m_rows[i] + j, 36);
+    memcpy(M[1], m_rows[i + 1] + j, 36);
+    memcpy(M[2], m_rows[i + 2] + j, 36);
+    memcpy(M[3], m_rows[i + 3] + j, 36);
+    memcpy(M[4], m_rows[i + 4] + j, 36);
+    memcpy(M[5], m_rows[i + 5] + j, 36);
+    memcpy(M[6], m_rows[i + 6] + j, 36);
+    memcpy(M[7], m_rows[i + 7] + j, 36);
+    memcpy(M[8], m_rows[i + 8] + j, 36);
+  }
+  inline void GetBlock(const int i, const int j, AlignedMatrixXf &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + M.GetRows() <= m_Nr);
+    UT_ASSERT(j >= 0 && j + M.GetColumns() <= m_Nc);
+    UT_ASSERT(m_symmetric == M.m_symmetric);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    if (m_symmetric && i == j) {
+      size_t size = sizeof(float) * M.m_Nc;
+      for (int k = 0; k < M.m_Nr; ++k, size -= sizeof(float)) {
+        memcpy(M[k] + k, m_rows[i + k] + j + k, size);
+      }
+    } else {
+      const size_t size = sizeof(float) * M.m_Nc;
+      for (int k = 0; k < M.m_Nr; ++k) {
+        memcpy(M[k], m_rows[i + k] + j, size);
+      }
+    }
   }
   inline void GetBlock(const int i, const int j, Vector6f &v) const {
 #ifdef CFG_DEBUG
     UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
     UT_ASSERT(j >= 0 && j < m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
 #endif
     v.v0() = m_rows[i][j];
     v.v1() = m_rows[i + 1][j];
@@ -2050,6 +2330,19 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
     v.v3() = m_rows[i + 3][j];
     v.v4() = m_rows[i + 4][j];
     v.v5() = m_rows[i + 5][j];
+  }
+  inline void GetBlock(const int i, const int j, AlignedVectorXf &V) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + V.Size() <= m_Nr);
+    UT_ASSERT(j >= 0 && j < m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const int N = V.Size();
+    for (int k = 0; k < N; ++k) {
+      V[k] = m_rows[i + k][j];
+    }
   }
   
   inline void GetDiagonal(const int i, Vector2f &v) const {
@@ -2061,23 +2354,124 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
     v.v1() = m_rows[i + 1][i + 1];
     v.v2() = m_rows[i + 2][i + 2];
   }
+  inline void GetDiagonal(const int i, Vector3f &v) const {
+    v.v0() = m_rows[i][i];
+    v.v1() = m_rows[i + 1][i + 1];
+    v.v2() = m_rows[i + 2][i + 2];
+  }
+
+  inline void IncreaseBlockDiagonal(const int i, const SymmetricMatrix2x2f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr && i + 2 <= m_Nc);
+#endif
+    int k = i;
+    m_rows[k][k] += M.m00();
+    m_rows[k][k + 1] += M.m01();
+    ++k;
+    m_rows[k][k] += M.m11();
+  }
+  inline void IncreaseBlockDiagonal(const int i, const SymmetricMatrix6x6f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 6 <= m_Nr && i + 6 <= m_Nc);
+#endif
+    const float *_M = M;
+    for (int _i = 0, k = 0; _i < 6; ++_i) {
+      for (int _j = _i; _j < 6; ++_j, ++k) {
+        m_rows[i + _i][i + _j] += _M[k];
+      }
+    }
+  }
+
+  inline void IncreaseBlock(const int i, const int j, const AlignedMatrix2x3f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const float *_M[2] = {&M.m00(), &M.m10()};
+    for (int _i = 0; _i < 2; ++_i) {
+      for (int _j = 0; _j < 3; ++_j) {
+        m_rows[i + _i][j + _j] += _M[_i][_j];
+      }
+    }
+  }
+  inline void IncreaseBlock(const int i, const int j, const Matrix3x2f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 2 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 3; ++_i) {
+      for (int _j = 0; _j < 2; ++_j) {
+        m_rows[i + _i][j + _j] += M[_i][_j];
+      }
+    }
+  }
+  inline void IncreaseBlock(const int i, const int j, const AlignedMatrix3x3f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const float *_M[3] = {&M.m00(), &M.m10(), &M.m20()};
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 3; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < 3; ++_j) {
+        m_rows[i + _i][j + _j] += _M[_i][_j];
+      }
+    }
+  }
+  inline void IncreaseBlock(const int i, const int j, const AlignedMatrix6x6f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 6; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < 6; ++_j) {
+        m_rows[i + _i][j + _j] += M[_i][_j];
+      }
+    }
+  }
 
   inline void Scale(const xp128f &s) {
-    for (int i = 0; i < m_Nr; ++i) {
-      SIMD::Multiply<0>(m_Nc, s, m_rows[i]);
+    if (m_symmetric) {
+      SIMD::Multiply<0>((m_Nc * (m_Nc + 1)) >> 1, s, Data());
+    } else {
+      for (int i = 0; i < m_Nr; ++i) {
+        SIMD::Multiply<0>(m_Nc, s, m_rows[i]);
+      }
     }
   }
 
   inline bool SolveLDL(AlignedVectorXf &b, const float *eps = NULL,
                        const bool decomposed = false) {
 #ifdef CFG_DEBUG
-    UT_ASSERT(m_Nr == m_Nc && !Symmetric());
+    UT_ASSERT(m_Nr == m_Nc && !m_symmetric);
+    UT_ASSERT(m_Nr == b.Size());
 #endif
     return LS::SolveLDL(m_Nr, m_rows.data(), b.Data(), eps, decomposed);
   }
+  inline int RankLDL(AlignedVectorXf *work, const float *eps = NULL) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(m_Nr == m_Nc);
+#endif
+    work->Resize(m_Nc);
+    return LS::RankLDL(m_Nr, m_rows.data(), work->Data(), eps);
+  }
   inline bool InverseLDL(const float *eps = NULL, const bool decomposed = false) {
 #ifdef CFG_DEBUG
-    UT_ASSERT(m_Nr == m_Nc && !Symmetric());
+    UT_ASSERT(m_Nr == m_Nc && !m_symmetric);
 #endif
     if (LS::InverseLDL(m_Nr, m_rows.data(), eps, decomposed)) {
       SetLowerFromUpper();
@@ -2087,10 +2481,54 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
       return false;
     }
   }
+  inline bool MarginalizeLDL(const int i, const int N, AlignedVectorXf &b,
+                             AlignedVectorXf *work, const float *eps = NULL,
+                             const bool erase = true) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(m_Nr == m_Nc);
+#endif
+    work->Resize(m_Nc);
+    const bool scc = LS::MarginalizeLDL(m_Nr, m_rows.data(), b.Data(), i, N, work->Data(), eps);
+    if (erase) {
+      Erase(i, N);
+      b.Erase(i, N);
+    } else {
+      MakeZero(i, N);
+      b.MakeZero(i, N);
+    }
+    return scc;
+  }
 
   inline void Print(const bool e = false) const {
-    for (int i = 0; i < m_Nr; ++i) {
-      PrintRow(i, e);
+    if (m_symmetric) {
+      for (int i = 0; i < m_Nr; ++i) {
+        for (int j = 0; j < i; ++j) {
+          if (e) {
+            UT::Print("%e ", m_rows[j][i]);
+          } else {
+            UT::Print("%f ", m_rows[j][i]);
+          }
+        }
+        for (int j = i; j < m_Nc; ++j) {
+          if (e) {
+            UT::Print("%e ", m_rows[i][j]);
+          } else {
+            UT::Print("%f ", m_rows[i][j]);
+          }
+        }
+        UT::Print("\n");
+      }
+    } else {
+      for (int i = 0; i < m_Nr; ++i) {
+        for (int j = 0; j < m_Nc; ++j) {
+          if (e) {
+            UT::Print("%e ", m_rows[i][j]);
+          } else {
+            UT::Print("%f ", m_rows[i][j]);
+          }
+        }
+        UT::Print("\n");
+      }
     }
   }
   inline void PrintRow(const int i, const bool e = false) const {
@@ -2098,7 +2536,7 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
       if (e) {
         UT::Print("%e ", m_rows[i][j]);
       } else {
-        UT::Print("%.2f ", m_rows[i][j]);
+        UT::Print("%f ", m_rows[i][j]);
       }
     }
     UT::Print("\n");
@@ -2147,9 +2585,10 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
   inline bool AssertEqual(const AlignedMatrixXf &M,
                           const int verbose = 1, const std::string str = "",
                           const float epsAbs = 0.0f, const float epsRel = 0.0f) const {
-    LA::AlignedVectorXf V1, V2;
+    AlignedVectorXf V1, V2;
     bool equal = M.m_Nr == m_Nr && M.m_Nc == m_Nc && M.m_symmetric == m_symmetric;
-    const int verbose1 = verbose & 15, verbose2 = verbose >> 4;
+    //const int verbose1 = verbose & 15, verbose2 = verbose >> 4;
+    const int verbose1 = verbose, verbose2 = verbose;
     for (int i = 0; i < m_Nr && equal; ++i) {
       if (m_symmetric) {
         const int N = m_Nc - i;
@@ -2167,14 +2606,14 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
     }
     if (equal) {
       return true;
-    } else if (verbose2 >= 2) {
+    } else if (verbose2) {
       UT::PrintSeparator();
-      Print(verbose2 > 2);
+      Print(verbose2 > 1);
       UT::PrintSeparator();
-      M.Print(verbose2 > 2);
+      M.Print(verbose2 > 1);
       const AlignedMatrixXf E = *this - M;
       UT::PrintSeparator();
-      E.Print(verbose2 > 2);
+      E.Print(verbose2 > 1);
     }
     return false;
   }
@@ -2188,19 +2627,39 @@ class AlignedMatrixXf : public AlignedMatrixX<float> {
   inline bool AssertZero(const int verbose = 1, const std::string str = "",
                          const float epsAbs = 0.0f, const float epsRel = 0.0f) const {
     bool zero = true;
-    const int verbose1 = verbose & 15, verbose2 = verbose >> 4;
+    //const int verbose1 = verbose & 15, verbose2 = verbose >> 4;
+    const int verbose1 = verbose, verbose2 = verbose;
     for (int i = 0; i < m_Nr && zero; ++i) {
-      const LA::AlignedVectorXf V(m_rows[i], m_Nc, false);
+      const AlignedVectorXf V(m_rows[i], m_Nc, false);
       zero = V.AssertZero(verbose1, UT::String("%s %d", str.c_str(), i),
                           epsAbs, epsRel);
     }
     if (zero) {
       return true;
-    } else if (verbose2 >= 2) {
+    } else if (verbose2) {
       UT::PrintSeparator();
-      Print(verbose2 > 2);
+      Print(verbose2 > 1);
     }
     return false;
+  }
+
+  static inline void AddAbTo(const AlignedMatrixXf &A, const AlignedVectorXf &b, float *Ab) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(A.GetColumns() == b.Size());
+#endif
+    const int Nr = A.GetRows();
+    if (A.m_symmetric) {
+      const int Nc = A.GetColumns();
+      for (int i = 0; i < Nr; ++i) {
+        for (int j = 0; j < Nc; ++j) {
+          Ab[i] += A[i][j] * b[j];
+        }
+      }
+    } else {
+      for (int i = 0; i < Nr; ++i) {
+        Ab[i] += SIMD::Dot<0>(Nr, A[i], b.Data());
+      }
+    }
   }
 };
 
@@ -2221,6 +2680,693 @@ inline void Convert(const AlignedVectorXf &V1, float *V2) {
 #endif
   memcpy(V2, V1.Data(), sizeof(float) * N);
 }
+
+class AlignedMatrixXd : public AlignedMatrixX<double> {
+
+ public:
+
+  inline AlignedMatrixXd() {}
+  inline AlignedMatrixXd(const AlignedMatrixXd &M) { *this = M; }
+  inline void operator = (const AlignedMatrixXd &M) { Set(M); }
+
+  inline void operator *= (const double s) { Scale(s); }
+  inline AlignedMatrixXd operator - (const AlignedMatrixXd &B) const {
+    const AlignedMatrixXd &A = *this;
+#ifdef CFG_DEBUG
+    UT_ASSERT(A.GetRows() == B.GetRows() && A.GetColumns() == B.GetColumns());
+    UT_ASSERT(A.Symmetric() == B.Symmetric());
+#endif
+    AlignedMatrixXd AmB;
+    AmB.Resize(m_Nr, m_Nc, m_symmetric);
+    if (m_symmetric) {
+      SIMD::Subtract((m_Nc * (m_Nc + 1)) >> 1, A.Data(), B.Data(), AmB.Data());
+    } else {
+      for (int i = 0; i < m_Nr; ++i) {
+        SIMD::Subtract(m_Nc, A[i], B[i], AmB[i]);
+      }
+    }
+    return AmB;
+  }
+
+  inline bool Valid() const { return m_rows[0][0] != DBL_MAX; }
+  inline bool Invalid() const { return m_rows[0][0] == DBL_MAX; }
+  inline void Invalidate() { m_rows[0][0] = DBL_MAX; }
+
+  inline void Set(const AlignedMatrixXf &A) {
+    Resize(A.GetRows(), A.GetColumns(), A.Symmetric());
+    for (int i = 0; i < m_Nr; ++i) {
+      for (int j = m_symmetric ? i : 0; j < m_Nc; ++j) {
+        m_rows[i][j] = static_cast<double>(A[i][j]);
+      }
+    }
+  }
+  inline void Set(const AlignedMatrixXd &V) { AlignedMatrixX<double>::Set(V); }
+  inline void Get(AlignedMatrixXf &A) const {
+    A.Resize(m_Nr, m_Nc, m_symmetric);
+    for (int i = 0; i < m_Nr; ++i) {
+      for (int j = m_symmetric ? i : 0; j < m_Nc; ++j) {
+        A[i][j] = static_cast<float>(m_rows[i][j]);
+      }
+    }
+  }
+
+  inline void SetBlockDiagonal(const int i, const int N, const float m) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + N <= m_Nr && i + N <= m_Nc);
+#endif
+    const double _m = static_cast<double>(m);
+    const int i2 = i + N;
+    for (int _i = i; _i < i2; ++_i) {
+      m_rows[_i][_i] = _m;
+    }
+  }
+
+  inline void SetBlockDiagonal(const int i, const SymmetricMatrix2x2f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr && i + 2 <= m_Nc);
+#endif
+    int k = i;
+    m_rows[k][k] = static_cast<double>(M.m00());
+    m_rows[k][k + 1] = static_cast<double>(M.m01());
+    ++k;
+    m_rows[k][k] = static_cast<double>(M.m11());
+  }
+  inline void GetBlockDiagonal(const int i, SymmetricMatrix2x2f &M) const {
+    int k = i;
+    M.m00() = static_cast<float>(m_rows[k][k]);
+    M.m01() = static_cast<float>(m_rows[k][k + 1]);
+    ++k;
+    M.m11() = static_cast<float>(m_rows[k][k]);
+  }
+  inline void IncreaseBlockDiagonal(const int i, const SymmetricMatrix2x2f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr && i + 2 <= m_Nc);
+#endif
+    int k = i;
+    m_rows[k][k] += static_cast<double>(M.m00());
+    m_rows[k][k + 1] += static_cast<double>(M.m01());
+    ++k;
+    m_rows[k][k] += static_cast<double>(M.m11());
+  }
+
+  inline void SetBlock(const int i, const int j, const Matrix2x3f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    for (int _i = 0; _i < 2; ++_i) {
+      for (int _j = 0; _j < 3; ++_j) {
+        m_rows[i + _i][j + _j] = static_cast<double>(M[_i][_j]);
+      }
+    }
+  }
+  inline void GetBlock(const int i, const int j, Matrix2x3f &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    for (int _i = 0; _i < 2; ++_i) {
+      for (int _j = 0; _j < 3; ++_j) {
+        M[_i][_j] = static_cast<float>(m_rows[i + _i][j + _j]);
+      }
+    }
+  }
+
+  inline void SetBlock(const int i, const int j, const AlignedMatrix2x6f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    for (int _i = 0; _i < 2; ++_i) {
+      for (int _j = 0; _j < 6; ++_j) {
+        m_rows[i + _i][j + _j] = static_cast<double>(M[_i][_j]);
+      }
+    }
+  }
+  inline void GetBlock(const int i, const int j, AlignedMatrix2x6f &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    for (int _i = 0; _i < 2; ++_i) {
+      for (int _j = 0; _j < 6; ++_j) {
+        M[_i][_j] = static_cast<float>(m_rows[i + _i][j + _j]);
+      }
+    }
+  }
+
+  inline void SetBlock(const int i, const int j, const AlignedMatrix2x9f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 9 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    for (int _i = 0; _i < 2; ++_i) {
+      for (int _j = 0; _j < 9; ++_j) {
+        m_rows[i + _i][j + _j] = static_cast<double>(M[_i][_j]);
+      }
+    }
+  }
+  inline void GetBlock(const int i, const int j, AlignedMatrix2x9f &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 9 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    for (int _i = 0; _i < 2; ++_i) {
+      for (int _j = 0; _j < 9; ++_j) {
+        M[_i][_j] = static_cast<float>(m_rows[i + _i][j + _j]);
+      }
+    }
+  }
+
+  inline void SetBlock(const int i, const int j, const Matrix3x2f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 2 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    for (int _i = 0; _i < 3; ++_i) {
+      for (int _j = 0; _j < 2; ++_j) {
+        m_rows[i + _i][j + _j] = static_cast<double>(M[_i][_j]);
+      }
+    }
+  }
+  inline void GetBlock(const int i, const int j, Matrix3x2f &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 2 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    for (int _i = 0; _i < 3; ++_i) {
+      for (int _j = 0; _j < 2; ++_j) {
+        M[_i][_j] = static_cast<float>(m_rows[i + _i][j + _j]);
+      }
+    }
+  }
+
+  inline void SetBlock(const int i, const int j, const AlignedMatrix3x3f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const float *_M[3] = {&M.m00(), &M.m10(), &M.m20()};
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 3; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < 3; ++_j) {
+        m_rows[i + _i][j + _j] = static_cast<double>(_M[_i][_j]);
+      }
+    }
+  }
+  inline void GetBlock(const int i, const int j, AlignedMatrix3x3f &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    float *_M[3] = {&M.m00(), &M.m10(), &M.m20()};
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 3; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < 3; ++_j) {
+        _M[_i][_j] = static_cast<float>(m_rows[i + _i][j + _j]);
+      }
+    }
+    if (symmetric) {
+      M.SetLowerFromUpper();
+    }
+  }
+
+  inline void SetBlock(const int i, const int j, const Matrix3x3f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 3; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < 3; ++_j) {
+        m_rows[i + _i][j + _j] = static_cast<double>(M[_i][_j]);
+      }
+    }
+  }
+  inline void GetBlock(const int i, const int j, Matrix3x3f &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 3; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < 3; ++_j) {
+        M[_i][_j] = static_cast<float>(m_rows[i + _i][j + _j]);
+      }
+    }
+    if (symmetric) {
+      M.SetLowerFromUpper();
+    }
+  }
+
+  inline void SetBlock(const int i, const int j, const AlignedMatrix6x6f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 6; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < 6; ++_j) {
+        m_rows[i + _i][j + _j] = static_cast<double>(M[_i][_j]);
+      }
+    }
+  }
+  inline void GetBlock(const int i, const int j, AlignedMatrix6x6f &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 6; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < 6; ++_j) {
+        M[_i][_j] = static_cast<float>(m_rows[i + _i][j + _j]);
+      }
+    }
+    if (symmetric) {
+      M.SetLowerFromUpper();
+    }
+  }
+
+  inline void SetBlock(const int i, const int j, const AlignedMatrix6x9f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 9 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    for (int _i = 0; _i < 6; ++_i) {
+      for (int _j = 0; _j < 9; ++_j) {
+        m_rows[i + _i][j + _j] = static_cast<double>(M[_i][_j]);
+      }
+    }
+  }
+  inline void GetBlock(const int i, const int j, AlignedMatrix6x9f &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 9 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    for (int _i = 0; _i < 6; ++_i) {
+      for (int _j = 0; _j < 9; ++_j) {
+        M[_i][_j] = static_cast<float>(m_rows[i + _i][j + _j]);
+      }
+    }
+  }
+
+  inline void SetBlock(const int i, const int j, const AlignedMatrix9x6f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 9 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    for (int _i = 0; _i < 9; ++_i) {
+      for (int _j = 0; _j < 6; ++_j) {
+        m_rows[i + _i][j + _j] = static_cast<double>(M[_i][_j]);
+      }
+    }
+  }
+  inline void GetBlock(const int i, const int j, AlignedMatrix9x6f &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 9 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    for (int _i = 0; _i < 9; ++_i) {
+      for (int _j = 0; _j < 6; ++_j) {
+        M[_i][_j] = static_cast<float>(m_rows[i + _i][j + _j]);
+      }
+    }
+  }
+
+  inline void SetBlock(const int i, const int j, const AlignedMatrix9x9f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 9 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 9 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 9; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < 9; ++_j) {
+        m_rows[i + _i][j + _j] = static_cast<double>(M[_i][_j]);
+      }
+    }
+  }
+  inline void GetBlock(const int i, const int j, AlignedMatrix9x9f &M) const {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 9 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 9 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 9; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < 9; ++_j) {
+        M[_i][_j] = static_cast<float>(m_rows[i + _i][j + _j]);
+      }
+    }
+    if (symmetric) {
+      M.SetLowerFromUpper();
+    }
+  }
+  
+  inline void SetBlock(const int i, const int j, const AlignedMatrixXf &M) {
+    const int Nr = M.GetRows(), Nc = M.GetColumns();
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + Nr <= m_Nr);
+    UT_ASSERT(j >= 0 && j + Nc <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < Nr; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < Nc; ++_j) {
+        m_rows[i + _i][j + _j] = static_cast<double>(M[_i][_j]);
+      }
+    }
+  }
+  inline void GetBlock(const int i, const int j, AlignedMatrixXf &M) const {
+    const int Nr = M.GetRows(), Nc = M.GetColumns();
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + Nr <= m_Nr);
+    UT_ASSERT(j >= 0 && j + Nc <= m_Nc);
+    UT_ASSERT(m_symmetric == M.Symmetric());
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < Nr; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < Nc; ++_j) {
+        M[_i][_j] = static_cast<float>(m_rows[i + _i][j + _j]);
+      }
+    }
+    if (symmetric) {
+      M.SetLowerFromUpper();
+    }
+  }
+  
+  inline void IncreaseBlock(const int i, const int j, const AlignedMatrix2x3f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 2 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const float *_M[2] = {&M.m00(), &M.m10()};
+    for (int _i = 0; _i < 2; ++_i) {
+      for (int _j = 0; _j < 3; ++_j) {
+        m_rows[i + _i][j + _j] += static_cast<double>(_M[_i][_j]);
+      }
+    }
+  }
+  inline void IncreaseBlock(const int i, const int j, const Matrix3x2f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 2 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 3; ++_i) {
+      for (int _j = 0; _j < 2; ++_j) {
+        m_rows[i + _i][j + _j] += static_cast<double>(M[_i][_j]);
+      }
+    }
+  }
+  inline void IncreaseBlock(const int i, const int j, const AlignedMatrix3x3f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 3 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 3 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const float *_M[3] = {&M.m00(), &M.m10(), &M.m20()};
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 3; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < 3; ++_j) {
+        m_rows[i + _i][j + _j] += static_cast<double>(_M[_i][_j]);
+      }
+    }
+  }
+
+  inline void IncreaseBlock(const int i, const int j, const AlignedMatrix6x6f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 6 <= m_Nr);
+    UT_ASSERT(j >= 0 && j + 6 <= m_Nc);
+    if (m_symmetric) {
+      UT_ASSERT(i <= j);
+    }
+#endif
+    const bool symmetric = m_symmetric && i == j;
+    for (int _i = 0; _i < 6; ++_i) {
+      for (int _j = symmetric ? _i : 0; _j < 6; ++_j) {
+        m_rows[i + _i][j + _j] += static_cast<double>(M[_i][_j]);
+      }
+    }
+  }
+  inline void IncreaseBlockDiagonal(const int i, const SymmetricMatrix6x6f &M) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(i >= 0 && i + 6 <= m_Nr && i + 6 <= m_Nc);
+#endif
+    const float *_M = M;
+    for (int _i = 0, k = 0; _i < 6; ++_i) {
+      for (int _j = _i; _j < 6; ++_j, ++k) {
+        m_rows[i + _i][i + _j] += static_cast<double>(_M[k]);
+      }
+    }
+  }
+
+  inline void SetLowerFromUpper() {
+#ifdef CFG_DEBUG
+    UT_ASSERT(!Symmetric());
+#endif
+    const int N = std::min(m_Nr, m_Nc);
+    for (int i = 0; i < N; ++i) {
+      for (int j = 0; j < i; ++j) {
+        m_rows[i][j] = m_rows[j][i];
+      }
+    }
+  }
+
+  inline void Scale(const double s) {
+    if (m_symmetric) {
+      SIMD::Multiply((m_Nc * (m_Nc + 1)) >> 1, s, Data());
+    } else {
+      for (int i = 0; i < m_Nr; ++i) {
+        SIMD::Multiply(m_Nc, s, m_rows[i]);
+      }
+    }
+  }
+
+  inline bool SolveLDL(AlignedVectorXd &b, const double *eps = NULL,
+                       const bool decomposed = false) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(m_Nr == m_Nc && !m_symmetric);
+    UT_ASSERT(m_Nr == b.Size());
+#endif
+    return LS::SolveLDL(m_Nr, m_rows.data(), b.Data(), eps, decomposed);
+  }
+  inline int RankLDL(AlignedVectorXd *work, const double *eps = NULL) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(m_Nr == m_Nc);
+#endif
+    work->Resize(m_Nc);
+    return LS::RankLDL(m_Nr, m_rows.data(), work->Data(), eps);
+  }
+  inline bool InverseLDL(const double *eps = NULL, const bool decomposed = false) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(m_Nr == m_Nc && !m_symmetric);
+#endif
+    if (LS::InverseLDL(m_Nr, m_rows.data(), eps, decomposed)) {
+      SetLowerFromUpper();
+      return true;
+    } else {
+      Invalidate();
+      return false;
+    }
+  }
+  inline bool MarginalizeLDL(const int i, const int N, AlignedVectorXd &b,
+                             AlignedVectorXd *work, const double *eps = NULL) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(m_Nr == m_Nc);
+#endif
+    work->Resize(m_Nc);
+    const bool scc = LS::MarginalizeLDL(m_Nr, m_rows.data(), b.Data(), i, N, work->Data(), eps);
+    Erase(i, N);
+    b.Erase(i, N);
+    return scc;
+  }
+  inline void Print(const bool e = false) const {
+    if (m_symmetric) {
+      for (int i = 0; i < m_Nr; ++i) {
+        for (int j = 0; j < i; ++j) {
+          if (e) {
+            UT::Print("%e ", m_rows[j][i]);
+          } else {
+            UT::Print("%f ", m_rows[j][i]);
+          }
+        }
+        for (int j = i; j < m_Nc; ++j) {
+          if (e) {
+            UT::Print("%e ", m_rows[i][j]);
+          } else {
+            UT::Print("%f ", m_rows[i][j]);
+          }
+        }
+        UT::Print("\n");
+      }
+    } else {
+      for (int i = 0; i < m_Nr; ++i) {
+        for (int j = 0; j < m_Nc; ++j) {
+          if (e) {
+            UT::Print("%e ", m_rows[i][j]);
+          } else {
+            UT::Print("%f ", m_rows[i][j]);
+          }
+        }
+        UT::Print("\n");
+      }
+    }
+  }
+  inline void PrintRow(const int i, const bool e = false) const {
+    for (int j = 0; j < m_Nc; ++j) {
+      if (e) {
+        UT::Print("%e ", m_rows[i][j]);
+      } else {
+        UT::Print("%f ", m_rows[i][j]);
+      }
+    }
+    UT::Print("\n");
+  }
+  inline bool AssertEqual(const AlignedMatrixXd &M,
+                          const int verbose = 1, const std::string str = "",
+                          const double epsAbs = 0.0, const double epsRel = 0.0) const {
+    AlignedVectorXd V1, V2;
+    bool equal = M.m_Nr == m_Nr && M.m_Nc == m_Nc && M.m_symmetric == m_symmetric;
+    //const int verbose1 = verbose & 15, verbose2 = verbose >> 4;
+    const int verbose1 = verbose, verbose2 = verbose;
+    for (int i = 0; i < m_Nr && equal; ++i) {
+      if (m_symmetric) {
+        const int N = m_Nc - i;
+        if (N == 0) {
+          break;
+        }
+        V1.Bind(m_rows[i] + i, N);
+        V2.Bind((float *) (M[i] + i), N);
+      } else {
+        V1.Bind(m_rows[i], m_Nc);
+        V2.Bind((float *) M[i], m_Nc);
+      }
+      equal = V1.AssertEqual(V2, verbose1, UT::String("%s %d", str.c_str(), i),
+                             epsAbs, epsRel);
+    }
+    if (equal) {
+      return true;
+    } else if (verbose2) {
+      UT::PrintSeparator();
+      Print(verbose2 > 1);
+      UT::PrintSeparator();
+      M.Print(verbose2 > 1);
+      const AlignedMatrixXd E = *this - M;
+      UT::PrintSeparator();
+      E.Print(verbose2 > 1);
+    }
+    return false;
+  }
+  inline bool AssertZero(const int verbose = 1, const std::string str = "",
+                         const double epsAbs = 0.0, const double epsRel = 0.0) const {
+    bool zero = true;
+    //const int verbose1 = verbose & 15, verbose2 = verbose >> 4;
+    const int verbose1 = verbose, verbose2 = verbose;
+    for (int i = 0; i < m_Nr && zero; ++i) {
+      const AlignedVectorXd V(m_rows[i], m_Nc, false);
+      zero = V.AssertZero(verbose1, UT::String("%s %d", str.c_str(), i),
+                          epsAbs, epsRel);
+    }
+    if (zero) {
+      return true;
+    } else if (verbose2) {
+      UT::PrintSeparator();
+      Print(verbose2 > 1);
+    }
+    return false;
+  }
+
+  static inline void AddAbTo(const AlignedMatrixXd &A, const AlignedVectorXd &b, double *Ab) {
+#ifdef CFG_DEBUG
+    UT_ASSERT(A.GetColumns() == b.Size());
+#endif
+    const int Nr = A.GetRows();
+    if (A.m_symmetric) {
+      const int Nc = A.GetColumns();
+      for (int i = 0; i < Nr; ++i) {
+        for (int j = 0; j < Nc; ++j) {
+          Ab[i] += A[i][j] * b[j];
+        }
+      }
+    } else {
+      for (int i = 0; i < Nr; ++i) {
+        Ab[i] += SIMD::Dot<0>(Nr, A[i], b.Data());
+      }
+    }
+  }
+};
 }
 
 #ifdef CFG_DEBUG_EIGEN
@@ -2680,15 +3826,18 @@ class EigenMatrixX : public Eigen::Matrix<TYPE, Eigen::Dynamic, Eigen::Dynamic, 
   inline EigenMatrixX() : Eigen::Matrix<TYPE, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>() {}
   inline EigenMatrixX(const Eigen::Matrix<TYPE, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
                       &e_M) : Eigen::Matrix<TYPE, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>(e_M) {}
-  inline EigenMatrixX(const LA::AlignedMatrixXf &M) :
+  inline EigenMatrixX(const AlignedMatrixX<TYPE> &M) :
     Eigen::Matrix<TYPE, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>() {
     EigenMatrixX<TYPE> &e_M = *this;
     const int Nr = M.GetRows(), Nc = M.GetColumns();
     Resize(Nr, Nc);
     for (int i = 0; i < Nr; ++i) {
-      for (int j = 0; j < Nc; ++j) {
+      for (int j = M.Symmetric() ? i : 0; j < Nc; ++j) {
         e_M(i, j) = M[i][j];
       }
+    }
+    if (M.Symmetric()) {
+      SetLowerFromUpper();
     }
   }
   inline void operator = (const Eigen::Matrix<TYPE, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
@@ -2782,22 +3931,32 @@ class EigenMatrixX : public Eigen::Matrix<TYPE, Eigen::Dynamic, Eigen::Dynamic, 
       const EigenMatrixX<TYPE> e_Mi1 = EigenMatrixX<TYPE>(e_Mii * e_Ai1);
       const EigenMatrixX<TYPE> e_Mi2 = EigenMatrixX<TYPE>(e_Mii * e_Ai2);
       const EigenMatrixX<TYPE> e_A1i = EigenMatrixX<TYPE>(this->block(0, i, N1, Ni));
-      const EigenMatrixX<TYPE> e_A2i = EigenMatrixX<TYPE>(this->block(j, i, N2r, Ni));
+      //const EigenMatrixX<TYPE> e_A2i = EigenMatrixX<TYPE>(this->block(j, i, N2r, Ni));
+      const EigenMatrixX<TYPE> e_A2i = EigenMatrixX<TYPE>(this->block(i, j, Ni, N2r).transpose());
       const EigenMatrixX<TYPE> e_M1i = EigenMatrixX<TYPE>(e_A1i * e_Mii);
       const EigenMatrixX<TYPE> e_M2i = EigenMatrixX<TYPE>(e_A2i * e_Mii);
       if (upperLeft) {
-        this->block(0, 0, N1, N1) -= e_M1i * e_Ai1;
-        this->block(0, j, N1, N2c) -= e_M1i * e_Ai2;
-        this->block(j, 0, N2r, N1) -= e_M2i * e_Ai1;
+        this->block(0, 0, N1, N1) -= e_A1i * e_Mi1;
+        this->block(0, j, N1, N2c) -= e_A1i * e_Mi2;
+        //this->block(j, 0, N2r, N1) -= e_A2i * e_Mi1;
+        this->block(j, 0, N2r, N1) = this->block(0, j, N1, N2r).transpose();
       }
-      this->block(j, j, N2r, N2c) -= e_M2i * e_Ai2;
+      //if (UT::Debugging()) {
+      //  UT::Print("%e - %e * %e = %e", (*this)(20, 20), e_A2i(20 - i - 1, 0), e_Mi2(0, 20 - i - 1),
+      //                                 (*this)(20, 20) - e_A2i(20 - i - 1, 0) * e_Mi2(0, 20 - i - 1));
+      //}
+      this->block(j, j, N2r, N2c) -= e_A2i * e_Mi2;
+      //if (UT::Debugging()) {
+      //  UT::Print(" --> %e\n", (*this)(20, 20));
+      //}
       this->block(i, i, Ni, Ni) = -e_Mii;
       if (upperLeft) {
         this->block(i, 0, Ni, N1) = -e_Mi1;
         this->block(0, i, N1, Ni) = -e_M1i;
       }
       this->block(i, j, Ni, N2c) = -e_Mi2;
-      this->block(j, i, N2r, Ni) = -e_M2i;
+      //this->block(j, i, N2r, Ni) = -e_M2i;
+      this->block(j, i, N2r, Ni) = this->block(i, j, Ni, N2r).transpose();
     } else {
       this->block(i, i, Ni, Ni).setZero();
       if (upperLeft) {
@@ -2814,13 +3973,25 @@ class EigenMatrixX : public Eigen::Matrix<TYPE, Eigen::Dynamic, Eigen::Dynamic, 
       this->block(0, i, Nr, Ni).setZero();
     }
   }
-  inline LA::AlignedMatrixXf GetAlignedMatrixXf() const {
+  inline LA::AlignedMatrixXf GetAlignedMatrixXf(const bool symmetric = false) const {
     LA::AlignedMatrixXf M;
     const int Nr = GetRows(), Nc = GetColumns();
-    M.Resize(Nr, Nc);
+    M.Resize(Nr, Nc, symmetric);
     const EigenMatrixX<TYPE> &e_M = *this;
     for (int i = 0; i < Nr; ++i) {
-      for (int j = 0; j < Nc; ++j) {
+      for (int j = symmetric ? i : 0; j < Nc; ++j) {
+        M[i][j] = e_M(i, j);
+      }
+    }
+    return M;
+  }
+  inline LA::AlignedMatrixXd GetAlignedMatrixXd(const bool symmetric = false) const {
+    LA::AlignedMatrixXd M;
+    const int Nr = GetRows(), Nc = GetColumns();
+    M.Resize(Nr, Nc, symmetric);
+    const EigenMatrixX<TYPE> &e_M = *this;
+    for (int i = 0; i < Nr; ++i) {
+      for (int j = symmetric ? i : 0; j < Nc; ++j) {
         M[i][j] = e_M(i, j);
       }
     }
@@ -2853,11 +4024,18 @@ class EigenMatrixX : public Eigen::Matrix<TYPE, Eigen::Dynamic, Eigen::Dynamic, 
   }
   inline void Print(const bool e = false) const { GetAlignedMatrixXf().Print(e); }
   inline void PrintDiagonal(const bool e = false) const { GetAlignedMatrixXf().PrintDiagonal(e); }
-  inline bool AssertEqual(const LA::AlignedMatrixXf &M, const int verbose = 1, const std::string str = "",
+  inline bool AssertEqual(const LA::AlignedMatrixXf &M,
+                          const int verbose = 1, const std::string str = "",
                           const float epsAbs = 0.0f, const float epsRel = 0.0f) const {
-    return GetAlignedMatrixXf().AssertEqual(M, verbose, str, epsAbs, epsRel);
+    return GetAlignedMatrixXf(M.Symmetric()).AssertEqual(M, verbose, str, epsAbs, epsRel);
   }
-  inline bool AssertEqual(const EigenMatrixX<TYPE> &e_M, const int verbose = 1, const std::string str = "",
+  inline bool AssertEqual(const LA::AlignedMatrixXd &M,
+                          const int verbose = 1, const std::string str = "",
+                          const double epsAbs = 0.0, const double epsRel = 0.0) const {
+    return GetAlignedMatrixXd(M.Symmetric()).AssertEqual(M, verbose, str, epsAbs, epsRel);
+  }
+  inline bool AssertEqual(const EigenMatrixX<TYPE> &e_M,
+                          const int verbose = 1, const std::string str = "",
                           const float epsAbs = 0.0f, const float epsRel = 0.0f) const {
     return AssertEqual(e_M.GetAlignedMatrixXf(), verbose, str, epsAbs, epsRel);
   }

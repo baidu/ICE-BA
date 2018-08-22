@@ -50,8 +50,17 @@ chmod +x build.sh
 ./build.sh
 
 ## 4. Run
-We provide an example to run ice-ba with [EuRoC dataset](https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets#downloads).  
-Please refer to **run_ice_ba.sh** for more details about how to run the example.
+We provide examples to run ice-ba with [EuRoC dataset](https://projects.asl.ethz.ch/datasets/doku.php?id=kmavvisualinertialdatasets#downloads).  
+
+### run ICE-BA stereo
+Run ICE-BA in stereo mode. Please refer to scripts/run_ice_ba_stereo.sh for more details about how to run the example.  
+
+### run ICE-BA monocular
+Run ICE-BA in monocular mode. Please refer to scripts/run_ice_ba_mono.sh for more details about how to run the example.  
+
+### run back-end only
+Front-end results can be saved into files. Back-end only mode loads these files and runs backend only.  
+Please refer to scripts/run_backend_only.sh for more details about how to run the example.  
 
 ## 5. Contribution
 You are very welcome to contribute to ICE-BA.

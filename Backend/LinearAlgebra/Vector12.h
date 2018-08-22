@@ -70,6 +70,17 @@ class AlignedVector12f {
     memcpy(&this->v6(), v1, 24);
   }
   inline void Get(float *v) const { memcpy(v, this, 48); }
+  inline void Get(ProductVector6f &v0, ProductVector6f &v1) const {
+    v0.Set(&this->v0());
+    v1.Set(&this->v6());
+  }
+  inline void GetMinus(AlignedVector12f &v) const {
+    const xp128f zero = xp128f::get(0.0f);
+    v.m_data4[0] = zero - m_data4[0];
+    v.m_data4[1] = zero - m_data4[1];
+    v.m_data4[2] = zero - m_data4[2];
+    v.m_data4[3] = zero - m_data4[3];
+  }
 
   inline void MakeZero() { memset(this, 0, sizeof(AlignedVector12f)); }
 

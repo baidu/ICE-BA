@@ -44,14 +44,15 @@ class Rigid3D : public Rotation3D {
     memcpy(this, &R, sizeof(Rotation3D));
     SetPosition(p);
   }
-  inline Rigid3D(const Rigid3D &T, const LA::AlignedVector3f *dp, const LA::AlignedVector3f *dr) {
+  inline Rigid3D(const Rigid3D &T, const LA::AlignedVector3f *dp, const LA::AlignedVector3f *dr,
+                 const float eps) {
     Point3D p;
     T.GetPosition(p);
     if (dp) {
       p += *dp;
     }
     if (dr) {
-      const Rotation3D dR(*dr);
+      const Rotation3D dR(*dr, eps);
       Rotation3D::AB(T, dR, *this);
     } else {
       *this = T;
@@ -146,6 +147,7 @@ class Rigid3D : public Rotation3D {
     ty() = -(r_10_11_12_x() * p).vsum_012();
     tz() = -(r_20_21_22_x() * p).vsum_012();
   }
+  inline void ScaleTranslation(const float s) { tx() *= s; ty() *= s; tz() *= s; }
 
   inline void Get(Quaternion &q, Point3D &p) const { GetRotation(q); GetPosition(p); }
   inline void Get(float *q, float *p) const {
@@ -214,8 +216,9 @@ class Rigid3D : public Rotation3D {
     UT_ASSERT(X.w() == 1.0f);
 #endif
     x.y() = (r20_r21_r22_tz() * X.xyzw()).vsum_all();
-    if (x.y() < 0.0f)
+    if (x.y() < 0.0f) {
       return false;
+    }
     x.y() = 1.0f / x.y();
     x.x() = (r00_r01_r02_tx() * X.xyzw()).vsum_all() * x.y();
     x.y() = (r10_r11_r12_ty() * X.xyzw()).vsum_all() * x.y();
@@ -226,8 +229,9 @@ class Rigid3D : public Rotation3D {
     UT_ASSERT(X.w() == 1.0f);
 #endif
     z = (r20_r21_r22_tz() * X.xyzw()).vsum_all();
-    if (z < 0.0f)
+    if (z < 0.0f) {
       return false;
+    }
     x.y() = 1.0f / z;
     x.x() = (r00_r01_r02_tx() * X.xyzw()).vsum_all() * x.y();
     x.y() = (r10_r11_r12_ty() * X.xyzw()).vsum_all() * x.y();
