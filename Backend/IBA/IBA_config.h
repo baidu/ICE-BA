@@ -26,6 +26,10 @@ typedef double PCG_TYPE;
 typedef float PCG_TYPE;
 #endif
 //#define CFG_CAMERA_PRIOR_SQUARE_FORM
+#define CFG_CAMERA_PRIOR_DOUBLE
+//#define CFG_CAMERA_PRIOR_REORDER
+//#define CFG_HANDLE_SCALE_JUMP
+#define CFG_CHECK_REPROJECTION
 
 #define CFG_STEREO
 #define CFG_SERIAL
@@ -35,7 +39,7 @@ typedef float PCG_TYPE;
 #ifdef WIN32
 //#define CFG_DEBUG
 #else
-#define CFG_DEBUG
+//#define CFG_DEBUG
 #endif
 #ifdef CFG_DEBUG
 #define CFG_DEBUG_EIGEN

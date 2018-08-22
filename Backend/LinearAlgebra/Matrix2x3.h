@@ -17,6 +17,7 @@
 #define _MATRIX_2x3_H_
 
 #include "Matrix2x2.h"
+#include "Matrix3x2.h"
 #include "Matrix3x3.h"
 
 namespace LA {
@@ -39,14 +40,6 @@ class AlignedMatrix2x3f {
 
   inline operator const float* () const { return (const float *) this; }
   inline operator       float* ()       { return (      float *) this; }
-
-  inline const float& operator() (const int row, const int col) const {
-    return m_data[row][col];
-  }
-
-  inline float& operator() (const int row, const int col) {
-    return m_data[row][col];
-  }
 
   inline void operator += (const AlignedMatrix2x3f &M) {
     m_00_01_02_r0() += M.m_00_01_02_r0();
@@ -89,6 +82,10 @@ class AlignedMatrix2x3f {
   inline void MakeZero() { memset(this, 0, sizeof(AlignedMatrix2x3f)); }
   inline void MakeZero2x2() { m00() = 0.0f; m01() = 0.0f; m10() = 0.0f; m11() = 0.0f; }
 
+  inline void GetTranspose(Matrix3x2f &M) const {
+    M[0][0] = m00();  M[1][0] = m01();  M[2][0] = m02();
+    M[0][1] = m10();  M[1][1] = m11();  M[2][1] = m12();
+  }
   inline void GetMinus(AlignedMatrix2x3f &M) const {
     const xp128f zero = xp128f::get(0.0f);
     M.m_00_01_02_r0() = zero - m_00_01_02_r0();
@@ -251,6 +248,10 @@ class AlignedMatrix2x3f {
   static inline void ATb(const AlignedMatrix2x3f &A, const Vector2f &b, AlignedVector3f &ATb) {
     ATb.v012r() = A.m_00_01_02_r0() * b.v0() + A.m_10_11_12_r1() * b.v1();
   }
+  static inline void AddATbTo(const AlignedMatrix2x3f &A, const Vector2f &b,
+                              AlignedVector3f &ATb) {
+    ATb.v012r() += A.m_00_01_02_r0() * b.v0() + A.m_10_11_12_r1() * b.v1();
+  }
   static inline void ATb(const AlignedMatrix2x3f &A, const xp128f &b0, const xp128f &b1,
                          AlignedVector3f &ATb) {
     ATb.v012r() = A.m_00_01_02_r0() * b0 + A.m_10_11_12_r1() * b1;
@@ -266,15 +267,15 @@ class AlignedMatrix2x3f {
 
 template<typename TYPE> class Matrix2x3 {
  public:
-  inline const TYPE& m00() const { return m_data[0]; }    inline TYPE& m00() { return m_data[0]; }
-  inline const TYPE& m01() const { return m_data[1]; }    inline TYPE& m01() { return m_data[1]; }
-  inline const TYPE& m02() const { return m_data[2]; }    inline TYPE& m02() { return m_data[2]; }
-  inline const TYPE& m10() const { return m_data[3]; }    inline TYPE& m10() { return m_data[3]; }
-  inline const TYPE& m11() const { return m_data[4]; }    inline TYPE& m11() { return m_data[4]; }
-  inline const TYPE& m12() const { return m_data[5]; }    inline TYPE& m12() { return m_data[5]; }
+  inline const TYPE& m00() const { return m_data[0][0]; }    inline TYPE& m00() { return m_data[0][0]; }
+  inline const TYPE& m01() const { return m_data[0][1]; }    inline TYPE& m01() { return m_data[0][1]; }
+  inline const TYPE& m02() const { return m_data[0][2]; }    inline TYPE& m02() { return m_data[0][2]; }
+  inline const TYPE& m10() const { return m_data[1][0]; }    inline TYPE& m10() { return m_data[1][0]; }
+  inline const TYPE& m11() const { return m_data[1][1]; }    inline TYPE& m11() { return m_data[1][1]; }
+  inline const TYPE& m12() const { return m_data[1][2]; }    inline TYPE& m12() { return m_data[1][2]; }
 
-  inline operator const TYPE* () const { return m_data; }
-  inline operator       TYPE* ()       { return m_data; }
+  inline const TYPE* operator [] (const int i) const { return m_data[i]; }
+  inline       TYPE* operator [] (const int i)       { return m_data[i]; }
 
   inline void MakeZero() { memset(this, 0, sizeof(Matrix2x3<TYPE>)); }
 
@@ -285,13 +286,28 @@ template<typename TYPE> class Matrix2x3 {
   inline void Set(const AlignedMatrix2x3f &M);
   inline void Get(AlignedMatrix2x3f &M) const;
 
+  inline void SetTranspose(const Matrix3x2<TYPE> &M) {
+    for (int i = 0; i < 2; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        m_data[i][j] = M[j][i];
+      }
+    }
+  }
+  inline void GetTranspose(Matrix3x2<TYPE> &M) const {
+    for (int i = 0; i < 2; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        M[j][i] = m_data[i][j];
+      }
+    }
+  }
+
   static inline void AddAbTo(const Matrix2x3<TYPE> &A, const AlignedVector3f &b, float *Ab) {
     Ab[0] += A.m00() * b.v0() + A.m01() * b.v1() + A.m02() * b.v2();
     Ab[1] += A.m10() * b.v0() + A.m11() * b.v1() + A.m12() * b.v2();
   }
 
  public:
-  TYPE m_data[9];
+  TYPE m_data[2][3];
 };
 
 typedef Matrix2x3<float> Matrix2x3f;

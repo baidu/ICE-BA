@@ -14,12 +14,12 @@
  * limitations under the License.
  *****************************************************************************/
 #include "stdafx.h"
-#ifndef CFG_DEBUG
+//#ifndef CFG_DEBUG
 //#define CFG_DEBUG
-#endif
+//#endif
 #include "LocalBundleAdjustor.h"
 
-#if defined CFG_DEBUG && defined CFG_GROUND_TRUTH
+#if defined WIN32 && defined CFG_DEBUG && defined CFG_GROUND_TRUTH
 //#define LBA_DEBUG_GROUND_TRUTH_MEASUREMENT
 #endif
 
@@ -230,8 +230,9 @@ void LocalBundleAdjustor::ComputeReductionFeatureLF() {
     m_dFp = dFp + m_dFp;
 //#ifdef CFG_DEBUG
 #if 0
-    if (m_iIter == 2)
-      UT::Print("[%d] %f\n", F->m_T.m_iFrm, dFp);
+    if (m_iIter == 0) {
+      UT::Print("%d %f\n", ic, dFa);
+    }
 #endif
   }
 }
@@ -268,9 +269,16 @@ void LocalBundleAdjustor::ComputeReductionFeatureKF() {
       for (int iz = Z.m_iz1; iz < Z.m_iz2; ++iz) {
         const FTR::Measurement &z = KF.m_zs[iz];
         const int ix = z.m_ix;
-        if (!(uds[ix] & LBA_FLAG_TRACK_UPDATE_DEPTH))
+        if (!(uds[ix] & LBA_FLAG_TRACK_UPDATE_DEPTH)) {
           continue;
+        }
         FTR::GetReduction(KF.m_Azs[iz], Tr, _KF.m_xs[ix], ds[ix], z, xds[ix], Ra, Rp);
+//#ifdef CFG_DEBUG
+#if 0
+        if (iKF == 43) {
+          UT::Print("[%d] %d %d %f\n", _KF.m_T.m_iFrm, ix, iz, Ra.m_dF);
+        }
+#endif
         dFa = Ra.m_dF + dFa;
         dFp = Rp.m_dF + dFp;
       }
@@ -279,8 +287,9 @@ void LocalBundleAdjustor::ComputeReductionFeatureKF() {
     m_dFp = dFp + m_dFp;
 //#ifdef CFG_DEBUG
 #if 0
-    if (m_iIter == 2)
-      UT::Print("[%d] %f\n", F->m_T.m_iFrm, dFp);
+    if (m_iIter == 0) {
+      UT::Print("%d %f\n", iKF, dFa);
+    }
 #endif
   }
 }
@@ -306,8 +315,9 @@ void LocalBundleAdjustor::ComputeReductionPriorDepth() {
     const Depth::Prior zp(KF.m_d.u(), 1.0f / (BA_VARIANCE_PRIOR_FRAME_DEPTH + KF.m_d.s2()));
     const int Nx = static_cast<int>(KF.m_xs.size());
     for (int ix = 0; ix < Nx; ++ix) {
-      if (!(uds[ix] & LBA_FLAG_TRACK_UPDATE_DEPTH))
+      if (!(uds[ix] & LBA_FLAG_TRACK_UPDATE_DEPTH)) {
         continue;
+      }
 #ifdef CFG_STEREO
       if (KF.m_xs[ix].m_xr.Valid()) {
         FTR::GetReduction(KF.m_Ards[ix], m_K.m_br, ds[ix], KF.m_xs[ix], xds[ix], Rar, Rpr);
@@ -317,12 +327,7 @@ void LocalBundleAdjustor::ComputeReductionPriorDepth() {
       else
 #endif
       {
-        const Depth::Prior _zp =
-#ifdef CFG_DEPTH_MAP
-          KF.m_xs[ix].m_d != 0.0f ? Depth::Prior(KF.m_xs[ix].m_d, DEPTH_MAP_WEIGHT) :
-#endif
-          zp;
-        _zp.GetReduction(KF.m_Apds[ix], ds[ix].u(), xds[ix], Ra, Rp);
+        zp.GetReduction(KF.m_Apds[ix], ds[ix].u(), xds[ix], Ra, Rp);
         m_dFa = Ra.m_dF + m_dFa;
         m_dFp = Rp.m_dF + m_dFp;
       }
@@ -397,7 +402,8 @@ void LocalBundleAdjustor::ComputeReductionIMU() {
 #endif
     m_DsLF[iLF2].GetReduction(BA_WEIGHT_IMU, m_AdsLF[iLF2], m_CsLF[iLF1], m_CsLF[iLF2], m_K.m_pu,
                               _xp[r1], _xr[r1], _xv[r1], _xba[r1], _xbw[r1],
-                              _xp[r2], _xr[r2], _xv[r2], _xba[r2], _xbw[r2], Ra, Rp);
+                              _xp[r2], _xr[r2], _xv[r2], _xba[r2], _xbw[r2], Ra, Rp,
+                              BA_ANGLE_EPSILON);
 //#ifdef CFG_DEBUG
 #if 0
     UT::PrintSeparator();
@@ -423,7 +429,7 @@ void LocalBundleAdjustor::ComputeReductionFixOrigin() {
   LA::AlignedVector3f xp, xr;
   Camera::Fix::Origin::Reduction Ra, Rp;
   m_xcsP[0].Get(xp, xr);
-  m_Zo.GetReduction(m_Ao, m_CsLF[iLF].m_T, xp, xr, Ra, Rp);
+  m_Zo.GetReduction(m_Ao, m_CsLF[iLF].m_T, xp, xr, Ra, Rp, BA_ANGLE_EPSILON);
   m_dFa = Ra.m_dF + m_dFa;
   m_dFp = Rp.m_dF + m_dFp;
 }
@@ -510,7 +516,7 @@ bool LocalBundleAdjustor::UpdateStatesPropose() {
     const bool ur = m_xr2s[ic] >= BA_UPDATE_ROTATION, up = m_xp2s[ic] >= BA_UPDATE_POSITION;
     if (ur || up) {
       xcsDL[ic].Get(dp, dr);
-      dR.SetRodrigues(dr);
+      dR.SetRodrigues(dr, BA_ANGLE_EPSILON);
       C.m_T = Rotation3D(C.m_T) * dR;
       C.m_p += dp;
       C.m_T.SetPosition(C.m_p);
@@ -650,10 +656,20 @@ bool LocalBundleAdjustor::UpdateStatesPropose() {
       Depth::InverseGaussian &d = ds[ix];
       d.u() += xds[ix];
       d.s2() = DEPTH_VARIANCE_EPSILON + KF.m_Mxs[ix].m_mdd.m_a * BA_WEIGHT_FEATURE;
-      if (!d.Valid()) {
-        d = dsBkp[ix];
-        continue;
-      }
+      //if (!d.Valid()) {
+      //  d = dsBkp[ix];
+      //  continue;
+      //}
+      //d.u() = UT_CLAMP(d.u(), DEPTH_MIN, DEPTH_MAX);
+      //d.u() = UT_CLAMP(d.u(), DEPTH_EPSILON, DEPTH_MAX);
+      //if (d.u() < DEPTH_EPSILON) {
+      //  d.u() = DEPTH_EPSILON;
+      //} else if (d.u() > DEPTH_MAX) {
+      //  d.u() = KF.m_d.u();
+      //}
+      //if (!d.Valid()) {
+      //  d.u() = KF.m_d.u();
+      //}
       m_axds.Push(axd);
       m_ucsKF[iKF] |= LBA_FLAG_FRAME_UPDATE_DEPTH;
       uds[ix] |= LBA_FLAG_TRACK_UPDATE_DEPTH;
@@ -690,7 +706,7 @@ bool LocalBundleAdjustor::UpdateStatesPropose() {
 }
 
 bool LocalBundleAdjustor::UpdateStatesDecide() {
-  const int nLFs = int(m_LFs.size()), nKFs = int(m_KFs.size());
+  const int nLFs = static_cast<int>(m_LFs.size()), nKFs = static_cast<int>(m_KFs.size());
   if (m_update && m_rho < BA_DL_GAIN_RATIO_MIN) {
     m_delta2 *= BA_DL_RADIUS_FACTOR_DECREASE;
     if (m_delta2 < BA_DL_RADIUS_MIN) {
@@ -743,10 +759,11 @@ bool LocalBundleAdjustor::UpdateStatesDecide() {
     //  UT::DebugStart();
     //}
     IMU::PreIntegrate(m_LFs[iLF2].m_us, m_LFs[iLF1].m_T.m_t, m_LFs[iLF2].m_T.m_t, m_CsLF[iLF1], &D,
-                      &m_work, true, D.m_u1.Valid() ? &D.m_u1 : NULL, D.m_u2.Valid() ? &D.m_u2 : NULL);
+                      &m_work, true, D.m_u1.Valid() ? &D.m_u1 : NULL,
+                      D.m_u2.Valid() ? &D.m_u2 : NULL, BA_ANGLE_EPSILON);
 #ifdef LBA_DEBUG_GROUND_TRUTH_MEASUREMENT
     if (!m_CsLFGT.Empty()) {
-      D.DebugSetMeasurement(m_CsLFGT[iLF1], m_CsLFGT[iLF2], m_K.m_pu);
+      D.DebugSetMeasurement(m_CsLFGT[iLF1], m_CsLFGT[iLF2], m_K.m_pu, BA_ANGLE_EPSILON);
     }
 #endif
     //if (UT::Debugging()) {
@@ -777,6 +794,7 @@ bool LocalBundleAdjustor::UpdateStatesDecide() {
         Uds[ix] |= LM_FLAG_TRACK_UPDATE_DEPTH;
       }
     }
+    //m_dsKF[iKF] = AverageDepths(m_ds.data() + id, Nx);
   }
   m_converge = m_xr2s.Maximal() < BA_CONVERGE_ROTATION && m_xp2s.Maximal() < BA_CONVERGE_POSITION &&
                m_xv2s.Maximal() < BA_CONVERGE_VELOCITY && m_xba2s.Maximal() < BA_CONVERGE_BIAS_ACCELERATION &&
@@ -944,4 +962,26 @@ void LocalBundleAdjustor::PushDepthUpdates(const LA::AlignedVectorXf &xds,
       }
     }
   }
+}
+
+float LocalBundleAdjustor::AverageDepths(const Depth::InverseGaussian *ds, const int N) {
+  const int NC = SIMD_FLOAT_CEIL(N);
+  m_work.Resize(NC + N);
+  LA::AlignedVectorXf us(m_work.Data(), N, false);
+  LA::AlignedVectorXf ws(us.Data() + NC, N, false);
+  for (int i = 0; i < N; ++i) {
+    const Depth::InverseGaussian &d = ds[i];
+    us[i] = d.u();
+    ws[i] = d.s2();
+  }
+  ws += DEPTH_VARIANCE_EPSILON;
+  ws.MakeInverse();
+  const float Sw = ws.Sum();
+  if (Sw < FLT_EPSILON) {
+    ws.Set(1.0f / N);
+  } else {
+    ws *= 1.0f / Sw;
+  }
+  us *= ws;
+  return us.Sum();
 }

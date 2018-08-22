@@ -28,26 +28,65 @@ template<typename TYPE> class Matrix9x9 {
 
   inline operator const TYPE* () const { return m_data; }
   inline operator       TYPE* ()       { return m_data; }
-  inline const float* operator[] (const int i) const { return m_data[i]; }
-  inline       float* operator[] (const int i)       { return m_data[i]; }
+  inline const TYPE* operator[] (const int i) const { return m_data[i]; }
+  inline       TYPE* operator[] (const int i)       { return m_data[i]; }
 
-  inline const float& operator() (int rows, int cols) const {
-    return m_data[rows][cols];
-  }
-  inline float& operator() (int rows, int cols) {
-    return m_data[rows][cols];
-  }
+  inline const TYPE& operator() (const int i, const int j) const { return m_data[i][j]; }
+  inline       TYPE& operator() (const int i, const int j)       { return m_data[i][j]; }
 
+  inline void operator *= (const TYPE s) {
+    for (int i = 0; i < 9; ++i) {
+      for (int j = 0; j < 9; ++j) {
+        m_data[i][j] *= s;
+      }
+    }
+  }
   inline Matrix9x9<TYPE> operator - (const Matrix9x9<TYPE> &B) const {
     Matrix9x9<TYPE> AmB;
-    for (int i = 0; i < 9; ++i)
-      for (int j = 0; j < 9; ++j)
+    for (int i = 0; i < 9; ++i) {
+      for (int j = 0; j < 9; ++j) {
         AmB.m_data[i][j] = m_data[i][j] - B.m_data[i][j];
+      }
+    }
     return AmB;
   }
+  
+  inline void SetLowerFromUpper() {
+    for (int i = 0; i < 9; ++i) {
+      for (int j = i; j < 9; ++j) {
+        m_data[j][i] = m_data[i][j];
+      }
+    }
+  }
+
+  inline bool Valid() const { return m_data[0][0] != UT::Invalid<TYPE>(); }
+  inline bool Invalid() const { return m_data[0][0] == UT::Invalid<TYPE>(); }
+  inline void Invalidate() { m_data[0][0] = UT::Invalid<TYPE>(); }
 
   inline void Set(const TYPE *M) { memcpy(this, M, sizeof(Matrix9x9<TYPE>)); }
+  inline void SetBlock(const int i, const int j, const Matrix3x3f &B);
+  inline void GetBlock(const int i, const int j, Matrix3x3f &B) const;
   inline void MakeZero() { memset(this, 0, sizeof(Matrix9x9<TYPE>)); }
+
+  inline bool SolveLDL(Vector9<TYPE> &b, const TYPE *eps = NULL, const bool decomposed = false) {
+    Matrix9x9<TYPE> &A = *this;
+    TYPE* _A[9] = {A[0], A[1], A[2], A[3], A[4], A[5], A[6], A[7], A[8]};
+    return LS::SolveLDL<TYPE>(9, _A, b, eps, decomposed);
+  }
+  inline bool InverseLDL(const TYPE *eps = NULL, const bool decomposed = false) {
+    return InverseLDL(*this, eps, decomposed);
+  }
+  static inline bool InverseLDL(Matrix9x9<TYPE> &A, const TYPE *eps = NULL,
+                                const bool decomposed = false) {
+    TYPE* _A[9] = {A[0], A[1], A[2], A[3], A[4], A[5], A[6], A[7], A[8]};
+    if (LS::InverseLDL<TYPE>(9, _A, eps, decomposed)) {
+      A.SetLowerFromUpper();
+      return true;
+    } else {
+      A.Invalidate();
+      return false;
+    }
+  }
 
   inline void Print(const bool e = false) const {
     for (int i = 0; i < 9; ++i) {
@@ -84,6 +123,47 @@ template<typename TYPE> class Matrix9x9 {
 
 typedef Matrix9x9<float> Matrix9x9f;
 typedef Matrix9x9<double> Matrix9x9d;
+
+template<> inline void Matrix9x9f::SetBlock(const int i, const int j, const Matrix3x3f &M) {
+#ifdef CFG_DEBUG
+  UT_ASSERT(i >= 0 && i + 3 <= 9);
+  UT_ASSERT(j >= 0 && j + 3 <= 9);
+#endif
+  memcpy(m_data[i] + j, M[0], 12);
+  memcpy(m_data[i + 1] + j, M[1], 12);
+  memcpy(m_data[i + 2] + j, M[2], 12);
+}
+template<> inline void Matrix9x9d::SetBlock(const int i, const int j, const Matrix3x3f &M) {
+#ifdef CFG_DEBUG
+  UT_ASSERT(i >= 0 && i + 3 <= 9);
+  UT_ASSERT(j >= 0 && j + 3 <= 9);
+#endif
+  for (int _i = 0; _i < 3; ++_i) {
+    for (int _j = 0; _j < 3; ++_j) {
+      m_data[i + _i][j + _j] = static_cast<double>(M[_i][_j]);
+    }
+  }
+}
+template<> inline void Matrix9x9f::GetBlock(const int i, const int j, Matrix3x3f &M) const {
+#ifdef CFG_DEBUG
+  UT_ASSERT(i >= 0 && i + 3 <= 9);
+  UT_ASSERT(j >= 0 && j + 3 <= 9);
+#endif
+  memcpy(M[0], m_data[i] + j, 12);
+  memcpy(M[1], m_data[i + 1] + j, 12);
+  memcpy(M[2], m_data[i + 2] + j, 12);
+}
+template<> inline void Matrix9x9d::GetBlock(const int i, const int j, Matrix3x3f &M) const {
+#ifdef CFG_DEBUG
+  UT_ASSERT(i >= 0 && i + 3 <= 9);
+  UT_ASSERT(j >= 0 && j + 3 <= 9);
+#endif
+  for (int _i = 0; _i < 3; ++_i) {
+    for (int _j = 0; _j < 3; ++_j) {
+      M[_i][_j] = static_cast<float>(m_data[i + _i][j + _j]);
+    }
+  }
+}
 
 template<typename TYPE> class SymmetricMatrix9x9 {
 

@@ -21,46 +21,82 @@
 
 void GlobalMap::LBA_Reset() {
   MT_WRITE_LOCK_BEGIN(m_MT, MT_TASK_NONE, MT_TASK_GM_LBA_Reset);
-  m_Cs.Resize(0);
+  m_Cs.resize(0);
   m_Uc = GM_FLAG_FRAME_DEFAULT;
-  m_ucs.resize(0);
   MT_WRITE_LOCK_END(m_MT, MT_TASK_NONE, MT_TASK_GM_LBA_Reset);
 }
 
-void GlobalMap::LBA_Push(const int iFrm, const Rigid3D &C) {
-  MT_WRITE_LOCK_BEGIN(m_MT, iFrm, MT_TASK_GM_LBA_Push);
-  m_Cs.Push(C);
-  m_ucs.resize(m_Cs.Size(), GM_FLAG_FRAME_DEFAULT);
-  MT_WRITE_LOCK_END(m_MT, iFrm, MT_TASK_GM_LBA_Push);
+void GlobalMap::LBA_PushKeyFrame(const Camera &C) {
+  MT_WRITE_LOCK_BEGIN(m_MT, C.m_iFrm, MT_TASK_GM_LBA_PushKeyFrame);
+  m_Cs.push_back(C);
+  MT_WRITE_LOCK_END(m_MT, C.m_iFrm, MT_TASK_GM_LBA_PushKeyFrame);
 }
 
-void GlobalMap::LBA_Delete(const int iKF) {
-  const int nKFs = m_Cs.Size();
-  m_Cs.Erase(iKF);
-  const ubyte uc = m_ucs[iKF];
-  m_ucs.erase(m_ucs.begin() + iKF);
-  if ((uc & GM_FLAG_FRAME_UPDATE_CAMERA) &&
-      !UT::VectorExistFlag<ubyte>(m_ucs.data(), nKFs - 1, GM_FLAG_FRAME_UPDATE_CAMERA)) {
-    m_Uc &= ~GM_FLAG_FRAME_UPDATE_CAMERA;
+void GlobalMap::LBA_DeleteKeyFrame(const int iFrm, const int iKF) {
+  MT_WRITE_LOCK_BEGIN(m_MT, iFrm, MT_TASK_GM_LBA_DeleteKeyFrame);
+  const ubyte uc = m_Cs[iKF].m_uc;
+  m_Cs.erase(m_Cs.begin() + iKF);
+  if (uc & GM_FLAG_FRAME_UPDATE_CAMERA) {
+    bool found = false;
+    const int N = static_cast<int>(m_Cs.size());
+    for (int i = 0; i < N && !found; ++i) {
+      found = (m_Cs[i].m_uc & GM_FLAG_FRAME_UPDATE_CAMERA) != 0;
+    }
+    if (!found) {
+      m_Uc &= ~GM_FLAG_FRAME_UPDATE_CAMERA;
+    }
   }
+  if (uc & GM_FLAG_FRAME_UPDATE_DEPTH) {
+    bool found = false;
+    const int N = static_cast<int>(m_Cs.size());
+    for (int i = 0; i < N && !found; ++i) {
+      found = (m_Cs[i].m_uc & GM_FLAG_FRAME_UPDATE_DEPTH) != 0;
+    }
+    if (!found) {
+      m_Uc &= ~GM_FLAG_FRAME_UPDATE_DEPTH;
+    }
+  }
+  MT_WRITE_LOCK_END(m_MT, iFrm, MT_TASK_GM_LBA_DeleteKeyFrame);
 }
 
-ubyte GlobalMap::LBA_Synchronize(const int iFrm, AlignedVector<Rigid3D> &Cs, std::vector<ubyte> &ucs) {
+ubyte GlobalMap::LBA_Synchronize(const int iFrm, AlignedVector<Rigid3D> &Cs,
+                                 AlignedVector<Rigid3D> &CsBkp, std::vector<ubyte> &ucs
+#ifdef CFG_HANDLE_SCALE_JUMP
+                               , std::vector<float> &ds, std::vector<float> &dsBkp
+#endif
+                               ) {
   ubyte ret;
   MT_WRITE_LOCK_BEGIN(m_MT, iFrm, MT_TASK_GM_LBA_Synchronize);
-  if (!(m_Uc & GM_FLAG_FRAME_UPDATE_CAMERA)) {
+  if (m_Uc == GM_FLAG_FRAME_DEFAULT) {
     ret = GM_FLAG_FRAME_DEFAULT;
   } else {
-    m_Uc &= ~GM_FLAG_FRAME_UPDATE_CAMERA;
-    Cs.Set(m_Cs);
-    const int nKFs = m_Cs.Size();
-    ucs.assign(nKFs, GM_FLAG_FRAME_DEFAULT);
-    for (int iKF = 0; iKF < nKFs; ++iKF) {
-      if (!(m_ucs[iKF] & GM_FLAG_FRAME_UPDATE_CAMERA)) {
+    m_Uc = GM_FLAG_FRAME_DEFAULT;
+    const int N = static_cast<int>(m_Cs.size());
+#ifdef CFG_DEBUG
+    UT_ASSERT(Cs.Size() == N);
+#endif
+    CsBkp.Resize(N);
+    ucs.assign(N, GM_FLAG_FRAME_DEFAULT);
+#ifdef CFG_HANDLE_SCALE_JUMP
+    dsBkp.resize(N);
+#endif
+    for (int i = 0; i < N; ++i) {
+      Camera &C = m_Cs[i];
+      if (C.m_uc == GM_FLAG_FRAME_DEFAULT) {
         continue;
       }
-      ucs[iKF] = GM_FLAG_FRAME_UPDATE_CAMERA;
-      m_ucs[iKF] &= ~GM_FLAG_FRAME_UPDATE_CAMERA;
+      if (C.m_uc & GM_FLAG_FRAME_UPDATE_CAMERA) {
+        CsBkp[i] = Cs[i];
+        Cs[i] = C.m_C;
+      }
+      ucs[i] = C.m_uc;
+#ifdef CFG_HANDLE_SCALE_JUMP
+      if (C.m_uc & GM_FLAG_FRAME_UPDATE_DEPTH) {
+        dsBkp[i] = ds[i];
+        ds[i] = C.m_d;
+      }
+#endif
+      C.m_uc = GM_FLAG_FRAME_DEFAULT;
     }
     ret = GM_FLAG_FRAME_UPDATE_CAMERA;
   }
@@ -68,52 +104,66 @@ ubyte GlobalMap::LBA_Synchronize(const int iFrm, AlignedVector<Rigid3D> &Cs, std
   return ret;
 }
 
-void GlobalMap::GBA_Update(const int iFrm, const AlignedVector<Rigid3D> &Cs,
-                           const std::vector<ubyte> &ucs) {
-  MT_WRITE_LOCK_BEGIN(m_MT, iFrm, MT_TASK_GM_GBA_Update);
-  const int nKFs = Cs.Size();
-#ifdef CFG_DEBUG
-  UT_ASSERT(m_Cs.Size() >= nKFs && static_cast<int>(ucs.size()) == nKFs);
+void GlobalMap::GBA_Update(const std::vector<int> &iFrms, const AlignedVector<Rigid3D> &Cs,
+                           const std::vector<ubyte> &ucs
+#ifdef CFG_HANDLE_SCALE_JUMP
+                         , const std::vector<float> &ds
 #endif
-  for (int iKF = 0; iKF < nKFs; ++iKF) {
-    const ubyte uc = ucs[iKF];
-    if (!(uc & GM_FLAG_FRAME_UPDATE_CAMERA)) {
+                         ) {
+  MT_WRITE_LOCK_BEGIN(m_MT, iFrms.back(), MT_TASK_GM_GBA_Update);
+  std::vector<Camera>::iterator i = m_Cs.begin();
+  const int N = static_cast<int>(iFrms.size());
+  for (int j = 0; j < N; ++j) {
+    const ubyte uc = ucs[j];
+    if (uc == GM_FLAG_FRAME_DEFAULT) {
       continue;
     }
-    m_Cs[iKF] = Cs[iKF];
-    m_Uc |= uc;
-    m_ucs[iKF] |= uc;
+    const int iFrm = iFrms[j];
+    i = std::lower_bound(i, m_Cs.end(), iFrm);
+    if (i == m_Cs.end()) {
+      break;
+    } else if (i->m_iFrm != iFrm) {
+      continue;
+    }
+    if (uc & GM_FLAG_FRAME_UPDATE_CAMERA) {
+      i->m_C = Cs[j];
+      i->m_uc |= GM_FLAG_FRAME_UPDATE_CAMERA;
+      m_Uc |= GM_FLAG_FRAME_UPDATE_CAMERA;
+    }
+#ifdef CFG_HANDLE_SCALE_JUMP
+    if (uc & GM_FLAG_FRAME_UPDATE_DEPTH) {
+      i->m_d = ds[j];
+      i->m_uc |= GM_FLAG_FRAME_UPDATE_DEPTH;
+      m_Uc |= GM_FLAG_FRAME_UPDATE_DEPTH;
+    }
+#endif
   }
-  MT_WRITE_LOCK_END(m_MT, iFrm, MT_TASK_GM_GBA_Update);
+  MT_WRITE_LOCK_END(m_MT, iFrms.back(), MT_TASK_GM_GBA_Update);
 }
 
 void GlobalMap::SaveB(FILE *fp) {
   MT_READ_LOCK_BEGIN(m_MT, MT_TASK_NONE, MT_TASK_NONE);
-  m_Cs.SaveB(fp);
+  UT::VectorSaveB(m_Cs, fp);
   UT::SaveB(m_Uc, fp);
-  UT::VectorSaveB(m_ucs, fp);
   MT_READ_LOCK_END(m_MT, MT_TASK_NONE, MT_TASK_NONE);
 }
 
 void GlobalMap::LoadB(FILE *fp) {
   MT_WRITE_LOCK_BEGIN(m_MT, MT_TASK_NONE, MT_TASK_NONE);
-  m_Cs.LoadB(fp);
+  UT::VectorLoadB(m_Cs, fp);
   UT::LoadB(m_Uc, fp);
-  UT::VectorLoadB(m_ucs, fp);
   MT_WRITE_LOCK_END(m_MT, MT_TASK_NONE, MT_TASK_NONE);
 }
 
 void GlobalMap::AssertConsistency() {
   MT_READ_LOCK_BEGIN(m_MT, MT_TASK_NONE, MT_TASK_NONE);
-  const int nKFs = m_Cs.Size();
-  for (int iKF = 0; iKF < nKFs; ++iKF) {
-    m_Cs[iKF].AssertOrthogonal();
+  ubyte Uc = GM_FLAG_FRAME_DEFAULT;
+  const int N = static_cast<int>(m_Cs.size());
+  for (int i = 0; i < N; ++i) {
+    const Camera &C = m_Cs[i];
+    C.m_C.AssertOrthogonal();
+    Uc |= C.m_uc;
   }
-  UT_ASSERT(static_cast<int>(m_ucs.size()) == nKFs);
-  if (UT::VectorExistFlag<ubyte>(m_ucs.data(), nKFs, GM_FLAG_FRAME_UPDATE_CAMERA)) {
-    UT_ASSERT((m_Uc & GM_FLAG_FRAME_UPDATE_CAMERA) != 0);
-  } else {
-    UT_ASSERT(!(m_Uc & GM_FLAG_FRAME_UPDATE_CAMERA));
-  }
+  UT_ASSERT(m_Uc == Uc);
   MT_READ_LOCK_END(m_MT, MT_TASK_NONE, MT_TASK_NONE);
 }

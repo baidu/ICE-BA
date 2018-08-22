@@ -125,7 +125,8 @@ float Camera::Prior::Rigid::EigenGetCost(const float w, const Rigid3D &T1, const
 #endif
 
 //#define CAMERA_FIX_POSE_EIGEN_DEBUG_JACOBIAN
-Camera::Fix::Origin::EigenErrorJacobian Camera::Fix::Origin::EigenGetErrorJacobian(const Rigid3D &T) const {
+Camera::Fix::Origin::EigenErrorJacobian
+Camera::Fix::Origin::EigenGetErrorJacobian(const Rigid3D &T, const float eps) const {
 //#ifdef CFG_DEBUG
 #if 0
   ((Rigid3D *) &T)->MakeIdentity();
@@ -139,8 +140,8 @@ Camera::Fix::Origin::EigenErrorJacobian Camera::Fix::Origin::EigenGetErrorJacobi
   const EigenRotation3D e_RzT = m_RT;
   const EigenRotation3D e_R = T;
   const EigenRotation3D e_eR = EigenRotation3D(e_RzT * e_R);
-  const EigenVector3f e_er = e_eR.GetRodrigues();
-  const EigenMatrix3x3f e_JrI = EigenRotation3D::GetRodriguesJacobianInverse(e_er);
+  const EigenVector3f e_er = e_eR.GetRodrigues(eps);
+  const EigenMatrix3x3f e_JrI = EigenRotation3D::GetRodriguesJacobianInverse(e_er, eps);
   const EigenMatrix3x3f e_Jr = EigenMatrix3x3f(e_JrI * e_eR);
   EigenErrorJacobian e_Je;
   e_Je.m_Jr = e_Jr;
@@ -158,9 +159,10 @@ Camera::Fix::Origin::EigenErrorJacobian Camera::Fix::Origin::EigenGetErrorJacobi
   return e_Je;
 }
 
-Camera::Fix::Origin::EigenFactor Camera::Fix::Origin::EigenGetFactor(const Rigid3D &T) const {
+Camera::Fix::Origin::EigenFactor
+Camera::Fix::Origin::EigenGetFactor(const Rigid3D &T, const float eps) const {
   EigenFactor e_A;
-  const EigenErrorJacobian e_Je = EigenGetErrorJacobian(T);
+  const EigenErrorJacobian e_Je = EigenGetErrorJacobian(T, eps);
   e_A.m_A.setZero();
   const xp128f &wr = m_wr;
   const float wp = m_wp[0];
@@ -174,8 +176,9 @@ Camera::Fix::Origin::EigenFactor Camera::Fix::Origin::EigenGetFactor(const Rigid
   return e_A;
 }
 
-float Camera::Fix::Origin::EigenGetCost(const Rigid3D &T, const EigenVector6f &e_x) const {
-  const EigenErrorJacobian e_Je = EigenGetErrorJacobian(T);
+float Camera::Fix::Origin::EigenGetCost(const Rigid3D &T, const EigenVector6f &e_x,
+                                        const float eps) const {
+  const EigenErrorJacobian e_Je = EigenGetErrorJacobian(T, eps);
   const EigenVector3f e_er = EigenVector3f(e_Je.m_er + e_Je.m_Jr * e_x.block<3, 1>(3, 0));
   const EigenVector3f e_ep = EigenVector3f(e_Je.m_ep + e_x.block<3, 1>(0, 0));
   const xp128f &wr = m_wr;

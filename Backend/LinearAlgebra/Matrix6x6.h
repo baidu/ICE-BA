@@ -98,6 +98,11 @@ class AlignedMatrix6x6f {
     Set00(M00);   Set03(M01);
     Set30(M10);   Set33(M11);
   }
+  inline void Set(const Matrix3x3f &M00, const Matrix3x3f &M01,
+                  const Matrix3x3f &M10, const Matrix3x3f &M11) {
+    Set00(M00);   Set03(M01);
+    Set30(M10);   Set33(M11);
+  }
   inline void Set(const AlignedMatrix3x3f *M0, const AlignedMatrix3x3f *M1) {
     Set(M0[0], M0[1], M1[0], M1[1]);
   }
@@ -105,6 +110,11 @@ class AlignedMatrix6x6f {
     memcpy(m_data[0], &M.m00(), 12);
     memcpy(m_data[1], &M.m10(), 12);
     memcpy(m_data[2], &M.m20(), 12);
+  }
+  inline void Set00(const Matrix3x3f &M) {
+    memcpy(m_data[0], M[0], 12);
+    memcpy(m_data[1], M[1], 12);
+    memcpy(m_data[2], M[2], 12);
   }
   inline void Set00(const SymmetricMatrix3x3f &M) {
     memcpy(m_data[0], &M.m00(), 12);
@@ -116,15 +126,30 @@ class AlignedMatrix6x6f {
     memcpy(m_data[1] + 3, &M.m10(), 12);
     memcpy(m_data[2] + 3, &M.m20(), 12);
   }
+  inline void Set03(const Matrix3x3f &M) {
+    memcpy(m_data[0] + 3, M[0], 12);
+    memcpy(m_data[1] + 3, M[1], 12);
+    memcpy(m_data[2] + 3, M[2], 12);
+  }
   inline void Set30(const AlignedMatrix3x3f &M) {
     memcpy(m_data[3], &M.m00(), 12);
     memcpy(m_data[4], &M.m10(), 12);
     memcpy(m_data[5], &M.m20(), 12);
   }
+  inline void Set30(const Matrix3x3f &M) {
+    memcpy(m_data[3], M[0], 12);
+    memcpy(m_data[4], M[1], 12);
+    memcpy(m_data[5], M[2], 12);
+  }
   inline void Set33(const AlignedMatrix3x3f &M) {
     memcpy(m_data[3] + 3, &M.m00(), 12);
     memcpy(m_data[4] + 3, &M.m10(), 12);
     memcpy(m_data[5] + 3, &M.m20(), 12);
+  }
+  inline void Set33(const Matrix3x3f &M) {
+    memcpy(m_data[3] + 3, M[0], 12);
+    memcpy(m_data[4] + 3, M[1], 12);
+    memcpy(m_data[5] + 3, M[2], 12);
   }
   inline void Set33(const SymmetricMatrix3x3f &M) {
     memcpy(m_data[3] + 3, &M.m00(), 12);
@@ -137,29 +162,58 @@ class AlignedMatrix6x6f {
     Get00(M00);   Get03(M01);
     Get30(M10);   Get33(M11);
   }
+  inline void Get(Matrix3x3f &M00, Matrix3x3f &M01,
+                  Matrix3x3f &M10, Matrix3x3f &M11) const {
+    Get00(M00);   Get03(M01);
+    Get30(M10);   Get33(M11);
+  }
   inline void Get00(AlignedMatrix3x3f &M) const {
     memcpy(&M.m00(), m_data[0], 12);
     memcpy(&M.m10(), m_data[1], 12);
     memcpy(&M.m20(), m_data[2], 12);
+  }
+  inline void Get00(Matrix3x3f &M) const {
+    memcpy(M[0], m_data[0], 12);
+    memcpy(M[1], m_data[1], 12);
+    memcpy(M[2], m_data[2], 12);
   }
   inline void Get03(AlignedMatrix3x3f &M) const {
     memcpy(&M.m00(), m_data[0] + 3, 12);
     memcpy(&M.m10(), m_data[1] + 3, 12);
     memcpy(&M.m20(), m_data[2] + 3, 12);
   }
+  inline void Get03(Matrix3x3f &M) const {
+    memcpy(M[0], m_data[0] + 3, 12);
+    memcpy(M[1], m_data[1] + 3, 12);
+    memcpy(M[2], m_data[2] + 3, 12);
+  }
   inline void Get30(AlignedMatrix3x3f &M) const {
     memcpy(&M.m00(), m_data[3], 12);
     memcpy(&M.m10(), m_data[4], 12);
     memcpy(&M.m20(), m_data[5], 12);
+  }
+  inline void Get30(Matrix3x3f &M) const {
+    memcpy(M[0], m_data[3], 12);
+    memcpy(M[1], m_data[4], 12);
+    memcpy(M[2], m_data[5], 12);
   }
   inline void Get33(AlignedMatrix3x3f &M) const {
     memcpy(&M.m00(), m_data[3] + 3, 12);
     memcpy(&M.m10(), m_data[4] + 3, 12);
     memcpy(&M.m20(), m_data[5] + 3, 12);
   }
+  inline void Get33(Matrix3x3f &M) const {
+    memcpy(M[0], m_data[3] + 3, 12);
+    memcpy(M[1], m_data[4] + 3, 12);
+    memcpy(M[2], m_data[5] + 3, 12);
+  }
   inline void GetDiagonal(LA::Vector6f &d) const {
     d.v0() = m_data[0][0];  d.v1() = m_data[1][1];  d.v2() = m_data[2][2];
     d.v3() = m_data[3][3];  d.v4() = m_data[4][4];  d.v5() = m_data[5][5];
+  }
+  inline void GetDiagonal(LA::Vector3f &d012, LA::Vector3f &d345) const {
+    d012.v0() = m_data[0][0];  d012.v1() = m_data[1][1];  d012.v2() = m_data[2][2];
+    d345.v0() = m_data[3][3];  d345.v1() = m_data[4][4];  d345.v2() = m_data[5][5];
   }
   inline void MakeZero() { memset(this, 0, sizeof(AlignedMatrix6x6f)); }
   inline void MakeZero3x3() {
@@ -332,7 +386,7 @@ class AlignedMatrix6x6f {
   }
   static inline bool SolveLDL(AlignedMatrix6x6f &A, AlignedVector6f &b, const float *eps = NULL) {
     float* _A[6] = {A[0], A[1], A[2], A[3], A[4], A[5]};
-    return LS::SolveLDL<float>(6, _A, b, eps);
+    return LS::SolveLDL(6, _A, &b.v0(), eps);
   }
 
   inline void Print(const bool e = false) const {
@@ -976,14 +1030,16 @@ template<typename TYPE> class SymmetricMatrix6x6 {
   inline SymmetricMatrix6x6<TYPE> operator * (const xp128f &s) const;
   inline SymmetricMatrix6x6<TYPE> operator - (const SymmetricMatrix6x6<TYPE> &B) const {
     SymmetricMatrix6x6<TYPE> AmB;
-    for (int i = 0; i < 21; ++i)
+    for (int i = 0; i < 21; ++i) {
       AmB.m_data[i] = m_data[i] - B.m_data[i];
+    }
     return AmB;
   }
   inline bool operator == (const SymmetricMatrix6x6<TYPE> &A) const {
     bool equal = true;
-    for (int i = 0; i < 21 && equal; ++i)
+    for (int i = 0; i < 21 && equal; ++i) {
       equal = m_data[i] == A.m_data[i];
+    }
     return equal;
   }
 
@@ -1030,7 +1086,9 @@ template<typename TYPE> class SymmetricMatrix6x6 {
   }
 
   inline AlignedMatrix6x6f GetAlignedMatrix6x6f() const {
-    AlignedMatrix6x6f M; GetAlignedMatrix6x6f(M); return M;
+    AlignedMatrix6x6f M;
+    GetAlignedMatrix6x6f(M);
+    return M;
   }
   inline void GetAlignedMatrix6x6f(AlignedMatrix6x6f &M) const;
 

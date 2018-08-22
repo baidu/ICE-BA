@@ -36,6 +36,8 @@
 
 // TODO (yanghongtian) : NEON implemetation.
 
+#define SIMD_DOUBLE_FLOOR(N) ((N) - ((N) & 1))
+#define SIMD_DOUBLE_CEIL(N) (((N) + 1) & (~1))
 #define SIMD_FLOAT_FLOOR(N) ((N) - ((N) & 3))
 #define SIMD_FLOAT_CEIL(N) (((N) + 3) & (~3))
 #define SIMD_SHORT_FLOOR(N) ((N) - ((N) & 7))
@@ -72,6 +74,7 @@ template<class TYPE> inline void Free(TYPE* p) {
 }
 template<class TYPE> inline int Ceil(const int N) { return N; }
 template<> inline int Ceil<float>(const int N) { return SIMD_FLOAT_CEIL(N); }
+template<> inline int Ceil<double>(const int N) { return SIMD_DOUBLE_CEIL(N); }
 
 template<class T>
 class aligned_allocator
@@ -236,7 +239,7 @@ template<> inline void Add<double>(const int N, const double *Va, double *Vb) {
 template<typename TYPE> inline void Add(const int N, const TYPE a, TYPE *Vb);
 template<> inline void Add<float>(const int N, const float a, float *Vb) {
   const int NF = SIMD_FLOAT_FLOOR(N);
-  xp128f _a; _a.vdup_all_lane(a);
+  const xp128f _a = xp128f::get(a);
   xp128f *b = (xp128f *) Vb;
   for (int i = 0; i < NF; i += 4, ++b) {
     *b += _a;
@@ -259,16 +262,28 @@ template<> inline void Subtract<float>(const int N, const float *Va, const float
     Vamb[i] = Va[i] - Vb[i];
   }
 }
+template<> inline void Subtract<double>(const int N, const double *Va, const double *Vb,
+                                        double *Vamb) {
+  for (int i = 0; i < N; ++i) {
+    Vamb[i] = Va[i] - Vb[i];
+  }
+}
 template<typename TYPE> inline void Subtract(const int N, const TYPE *Va, const TYPE b, TYPE *Vamb);
 template<> inline void Subtract<float>(const int N, const float *Va, const float b, float *Vamb) {
   const int NF = SIMD_FLOAT_FLOOR(N);
   const xp128f *a = (xp128f *) Va;
-  xp128f _b; _b.vdup_all_lane(b);
+  const xp128f _b = xp128f::get(b);
   xp128f *amb = (xp128f *) Vamb;
   for (int i = 0; i < NF; i += 4, ++a, ++amb) {
     *amb = *a - _b;
   }
   for (int i = NF; i < N; ++i) {
+    Vamb[i] = Va[i] - b;
+  }
+}
+template<> inline void Subtract<double>(const int N, const double *Va, const double b,
+                                        double *Vamb) {
+  for (int i = 0; i < N; ++i) {
     Vamb[i] = Va[i] - b;
   }
 }
@@ -281,6 +296,11 @@ template<> inline void Subtract<float>(const int N, const float *Va, float *Vb) 
     *b = *a - *b;
   }
   for (int i = NF; i < N; ++i) {
+    Vb[i] = Va[i] - Vb[i];
+  }
+}
+template<> inline void Subtract<double>(const int N, const double *Va, double *Vb) {
+  for (int i = 0; i < N; ++i) {
     Vb[i] = Va[i] - Vb[i];
   }
 }
@@ -592,6 +612,13 @@ inline void Minus(const int i, const int N, float *V) {
     Minus(i - NF, N - NF, V + NF);
     break;
   }
+  }
+}
+template<typename TYPE> inline void Minus(const int N, TYPE *V);
+template<> inline void Minus<float>(const int N, float *V) { Minus<0>(N, V); }
+template<> inline void Minus<double>(const int N, double *V) {
+  for (int i = 0; i < N; ++i) {
+    V[i] = -V[i];
   }
 }
 

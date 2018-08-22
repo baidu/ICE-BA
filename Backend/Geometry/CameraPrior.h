@@ -20,7 +20,12 @@
 
 namespace CameraPrior {
 
-namespace Block{
+namespace Element{
+#ifdef CFG_CAMERA_PRIOR_DOUBLE
+typedef double T;
+#else
+typedef float T;
+#endif
 class R : public LA::Vector2f {
  public:
   inline R() {}
@@ -75,7 +80,28 @@ class JC {
 };
 class EC {
  public:
+  inline void Set(const float *e) { m_ep.Set(e); m_er.Set(e + 3); }
+  inline void Set(const double *e) { m_ep.Set(e); m_er.Set(e + 3); }
+  inline void Get(float *e) const { m_ep.Get(e); m_er.Get(e + 3); }
+  inline void Get(double *e) const { m_ep.Get(e); m_er.Get(e + 3); }
+  inline void Get(C *e) const { e->Set(m_ep, m_er); } 
+ public:
   LA::AlignedVector3f m_ep, m_er;
+};
+class EM {
+ public:
+  inline void Set(const float *e) { m_ev.Set(e); m_eba.Set(e + 3); m_ebw.Set(e + 6); }
+  inline void Set(const double *e) { m_ev.Set(e); m_eba.Set(e + 3); m_ebw.Set(e + 6); }
+  inline void Get(float *e) const { m_ev.Get(e); m_eba.Get(e + 3); m_ebw.Get(e + 6); }
+  inline void Get(double *e) const { m_ev.Get(e); m_eba.Get(e + 3); m_ebw.Get(e + 6); }
+ public:  
+  inline void operator += (const EM &e) {
+    m_ev += e.m_ev;
+    m_eba += e.m_eba;
+    m_ebw += e.m_ebw;
+  }
+ public:
+  LA::AlignedVector3f m_ev, m_eba, m_ebw;
 };
 class RR : public LA::SymmetricMatrix2x2f {
  public:
@@ -100,10 +126,13 @@ class RM : public LA::AlignedMatrix2x9f {
                   const LA::AlignedMatrix2x3f &Arbw) {
     LA::AlignedMatrix2x9f::Set(Arv, Arba, Arbw);
   }
-  inline void Set(const LA::AlignedMatrix2x3f &Arv) { MakeZero(); SetBlock(Arv); }
-  inline void SetBlock(const LA::AlignedMatrix2x3f &Arv) {
-    LA::AlignedMatrix2x9f::SetBlock(0, 0, Arv);
+  inline void Set(const LA::AlignedMatrix2x3f &Arv) {
+    MakeZero();
+    SetBlock(0, 0, Arv);
   }
+  //inline void SetBlock(const LA::AlignedMatrix2x3f &Arv) {
+  //  LA::AlignedMatrix2x9f::SetBlock(0, 0, Arv);
+  //}
   inline RM operator + (const RM &B) const {
     RM ApB;
     LA::AlignedMatrix2x9f::ApB(*this, B, ApB);
@@ -123,6 +152,10 @@ class CC : public LA::AlignedMatrix6x6f {
   }
   inline void Get(LA::AlignedMatrix3x3f &App, LA::AlignedMatrix3x3f &Apr,
                   LA::AlignedMatrix3x3f &Arp, LA::AlignedMatrix3x3f &Arr) const {
+    LA::AlignedMatrix6x6f::Get(App, Apr, Arp, Arr);
+  }
+  inline void Get(LA::Matrix3x3f &App, LA::Matrix3x3f &Apr,
+                  LA::Matrix3x3f &Arp, LA::Matrix3x3f &Arr) const {
     LA::AlignedMatrix6x6f::Get(App, Apr, Arp, Arr);
   }
   inline void Increase(const LA::SymmetricMatrix3x3f &App, const LA::AlignedMatrix3x3f &Apr,
@@ -336,15 +369,20 @@ inline void AddAbTo(const RM &A, const M &b, R &Ab) {
 inline void AddAbTo(const CC &A, const C &b, C &Ab) {
   LA::AlignedMatrix6x6f::AddAbTo(A, b, (float *) &Ab);
 }
-}  // namespace Block
+}  // namespace Element
 
 namespace Vector {
-class C : public AlignedVector<Block::C> {
+#ifdef CFG_CAMERA_PRIOR_DOUBLE
+typedef LA::AlignedVectorXd X;
+#else
+typedef LA::AlignedVectorXf X;
+#endif
+class C : public AlignedVector<Element::C> {
  public:
   inline C() {}
-  inline C(const AlignedVector<Block::C> &V) { *((AlignedVector<Block::C> *) this) = V; }
+  inline C(const AlignedVector<Element::C> &V) { *((AlignedVector<Element::C> *) this) = V; }
   inline C(void *data, const int N, const bool own = true) :
-           AlignedVector<Block::C>(data, N, own) {}
+           AlignedVector<Element::C>(data, N, own) {}
   inline void operator += (const C &V) {
     const int N = Size();
 #ifdef CFG_DEBUG
@@ -363,9 +401,9 @@ class C : public AlignedVector<Block::C> {
     return S;
   }
 };
-class EC : public AlignedVector<Block::EC> {
+class EC : public AlignedVector<Element::EC> {
 };
-class JC : public AlignedVector<Block::JC> {
+class JC : public AlignedVector<Element::JC> {
  public:
   inline void GetTranspose(JC &JT) const {
     const int N = Size();
@@ -375,47 +413,47 @@ class JC : public AlignedVector<Block::JC> {
     }
   }
 };
-class RC : public AlignedVector<Block::RC> {
+class RC : public AlignedVector<Element::RC> {
  public:
   inline RC() {}
-  inline RC(const AlignedVector<Block::RC> &V) { *((AlignedVector<Block::RC> *) this) = V; }
+  inline RC(const AlignedVector<Element::RC> &V) { *((AlignedVector<Element::RC> *) this) = V; }
   inline RC(void *data, const int N, const bool own = true) :
-            AlignedVector<Block::RC>(data, N, own) {}
+            AlignedVector<Element::RC>(data, N, own) {}
 };
-class RM : public AlignedVector<Block::RM> {
+class RM : public AlignedVector<Element::RM> {
  public:
   inline RM() {}
-  inline RM(const AlignedVector<Block::RM> &V) { *((AlignedVector<Block::RM> *) this) = V; }
+  inline RM(const AlignedVector<Element::RM> &V) { *((AlignedVector<Element::RM> *) this) = V; }
   inline RM(void *data, const int N, const bool own = true) :
-            AlignedVector<Block::RM>(data, N, own) {}
+            AlignedVector<Element::RM>(data, N, own) {}
 };
-class CC : public AlignedVector<Block::CC> {
+class CC : public AlignedVector<Element::CC> {
  public:
   inline CC() {}
-  inline CC(const AlignedVector<Block::CC> &V) { *((AlignedVector<Block::CC> *) this) = V; }
+  inline CC(const AlignedVector<Element::CC> &V) { *((AlignedVector<Element::CC> *) this) = V; }
   inline CC(void *data, const int N, const bool own = true) :
-            AlignedVector<Block::CC>(data, N, own) {}
+            AlignedVector<Element::CC>(data, N, own) {}
 };
-class CM : public AlignedVector<Block::CM> {
+class CM : public AlignedVector<Element::CM> {
  public:
   inline CM() {}
-  inline CM(const AlignedVector<Block::CM> &V) { *((AlignedVector<Block::CM> *) this) = V; }
+  inline CM(const AlignedVector<Element::CM> &V) { *((AlignedVector<Element::CM> *) this) = V; }
   inline CM(void *data, const int N, const bool own = true) :
-            AlignedVector<Block::CM>(data, N, own) {}
+            AlignedVector<Element::CM>(data, N, own) {}
 };
-class MC : public AlignedVector<Block::MC> {
+class MC : public AlignedVector<Element::MC> {
  public:
   inline MC() {}
-  inline MC(const AlignedVector<Block::MC> &V) { *((AlignedVector<Block::MC> *) this) = V; }
+  inline MC(const AlignedVector<Element::MC> &V) { *((AlignedVector<Element::MC> *) this) = V; }
   inline MC(void *data, const int N, const bool own = true) :
-            AlignedVector<Block::MC>(data, N, own) {}
+            AlignedVector<Element::MC>(data, N, own) {}
 };
-class MM : public AlignedVector<Block::MM> {
+class MM : public AlignedVector<Element::MM> {
  public:
   inline MM() {}
-  inline MM(const AlignedVector<Block::MM> &V) { *((AlignedVector<Block::MM> *) this) = V; }
+  inline MM(const AlignedVector<Element::MM> &V) { *((AlignedVector<Element::MM> *) this) = V; }
   inline MM(void *data, const int N, const bool own = true) :
-            AlignedVector<Block::MM>(data, N, own) {}
+            AlignedVector<Element::MM>(data, N, own) {}
 };
 template<class BLOCK_A, class BLOCK_B, class BLOCK_ABT>
 inline void ABT(const AlignedVector<BLOCK_A> &A, const BLOCK_B &B,
@@ -423,7 +461,7 @@ inline void ABT(const AlignedVector<BLOCK_A> &A, const BLOCK_B &B,
   const int N = A.Size();
   ABT.Resize(N);
   for (int i = 0; i < N; ++i) {
-    Block::ABT(A[i], B, ABT[i]);
+    Element::ABT(A[i], B, ABT[i]);
   }
 }
 template<class BLOCK_A, class BLOCK_B, class BLOCK_ABT>
@@ -435,7 +473,7 @@ inline void ABT(const AlignedMatrixX<BLOCK_A> &A, const BLOCK_B &B,
 #endif
   ABT.Resize(N);
   for (int i = 0; i < N; ++i) {
-    Block::ABT(A[i][0], B, ABT[i]);
+    Element::ABT(A[i][0], B, ABT[i]);
   }
 }
 template<class BLOCK_A, class BLOCK_B, class BLOCK_ABT>
@@ -446,7 +484,7 @@ inline void AddABTTo(const AlignedVector<BLOCK_A> &A, const BLOCK_B &B,
   UT_ASSERT(ABT.Size() == N);
 #endif
   for (int i = 0; i < N; ++i) {
-    Block::AddABTTo(A[i], B, ABT[i]);
+    Element::AddABTTo(A[i], B, ABT[i]);
   }
 }
 template<class BLOCK_A, class BLOCK_B, class BLOCK_ABT>
@@ -457,7 +495,7 @@ inline void AddABTTo(const AlignedVector<BLOCK_A> &A, const BLOCK_B &B,
   UT_ASSERT(ABT.GetRows() == N && ABT.GetColumns() == 1);
 #endif
   for (int i = 0; i < N; ++i) {
-    Block::AddABTTo(A[i], B, ABT[i][0]);
+    Element::AddABTTo(A[i], B, ABT[i][0]);
   }
 }
 template<class BLOCK_A, class BLOCK_B, class BLOCK_ABT>
@@ -468,7 +506,7 @@ inline void AddABTTo(const BLOCK_A &A, const AlignedVector<BLOCK_B> &B,
   UT_ASSERT(ABT.Size() == N);
 #endif
   for (int i = 0; i < N; ++i) {
-    Block::AddABTTo(A, B[i], ABT[i]);
+    Element::AddABTTo(A, B[i], ABT[i]);
   }
 }
 template<class BLOCK_A, class BLOCK_B, class BLOCK_ABT>
@@ -479,7 +517,7 @@ inline void AddABTTo(const BLOCK_A &A, const AlignedMatrixX<BLOCK_B> &B,
   UT_ASSERT(B.GetColumns() == 1 && ABT.Size() == N);
 #endif
   for (int i = 0; i < N; ++i) {
-    Block::AddABTTo(A, B[i][0], ABT[i]);
+    Element::AddABTTo(A, B[i][0], ABT[i]);
   }
 }
 template<class BLOCK_A, class BLOCK_B, class BLOCK_ABT>
@@ -490,7 +528,7 @@ inline void AddAbTo(const AlignedVector<BLOCK_A> &A, const BLOCK_B &b,
   UT_ASSERT(Ab.Size() == N);
 #endif
   for (int i = 0; i < N; ++i) {
-    Block::AddAbTo(A[i], b, Ab[i]);
+    Element::AddAbTo(A[i], b, Ab[i]);
   }
 }
 
@@ -616,10 +654,25 @@ inline bool EigenAssertEqual(const EigenMatrixXf &e_V, const CM &V,
 }  // namespace Vector
 
 namespace Matrix {
-class CC : public AlignedMatrixX<Block::CC> {
+#ifdef CFG_CAMERA_PRIOR_DOUBLE
+typedef LA::AlignedMatrixXd X;
+#else
+typedef LA::AlignedMatrixXf X;
+#endif
+class CC : public AlignedMatrixX<Element::CC> {
  public:
   inline CC() {}
-  inline CC(const AlignedMatrixX<Block::CC> &M) { *((AlignedMatrixX<Block::CC> *) this) = M; }
+  inline CC(const AlignedMatrixX<Element::CC> &A) { *((AlignedMatrixX<Element::CC> *) this) = A; }
+  inline void MakeIdentity() {
+    MakeZero();
+    const int N = GetRows();
+#ifdef CFG_DEBUG
+    UT_ASSERT(GetColumns() == N);
+#endif
+    for (int i = 0; i < N; ++i) {
+      m_rows[i][i].MakeIdentity();
+    }
+  }
   inline void SetLowerFromUpper() {
     const int N = GetRows();
 #ifdef CFG_DEBUG
@@ -658,6 +711,21 @@ class CC : public AlignedMatrixX<Block::CC> {
   }
 };
 template<class BLOCK_A, class BLOCK_B, class BLOCK_ABT>
+inline void AddABTTo(const AlignedVector<BLOCK_A> &A, const AlignedVector<BLOCK_B> &B,
+                     AlignedMatrixX<BLOCK_ABT> &ABT) {
+  const int M = A.Size(), N = B.Size();
+#ifdef CFG_DEBUG
+  UT_ASSERT(ABT.GetRows() == M && ABT.GetColumns() == N);
+#endif
+  for (int i = 0; i < M; ++i) {
+    const BLOCK_A &Ai = A[i];
+    BLOCK_ABT *ABTi = ABT[i];
+    for (int j = 0; j < N; ++j) {
+      Element::AddABTTo(Ai, B[j], ABTi[j]);
+    }
+  }
+}
+template<class BLOCK_A, class BLOCK_B, class BLOCK_ABT>
 inline void AddABTToUpper(const AlignedVector<BLOCK_A> &A, const AlignedVector<BLOCK_B> &B,
                           AlignedMatrixX<BLOCK_ABT> &ABT) {
   const int N = A.Size();
@@ -667,9 +735,9 @@ inline void AddABTToUpper(const AlignedVector<BLOCK_A> &A, const AlignedVector<B
   for (int i = 0; i < N; ++i) {
     const BLOCK_A &Ai = A[i];
     BLOCK_ABT *ABTi = ABT[i];
-    Block::AddABTToUpper(Ai, B[i], ABTi[i]);
+    Element::AddABTToUpper(Ai, B[i], ABTi[i]);
     for (int j = i + 1; j < N; ++j) {
-      Block::AddABTTo(Ai, B[j], ABTi[j]);
+      Element::AddABTTo(Ai, B[j], ABTi[j]);
     }
   }
 }
@@ -684,9 +752,9 @@ inline void AddABTToUpper(const AlignedVector<BLOCK_A> &A, const AlignedMatrixX<
   for (int i = 0; i < N; ++i) {
     const BLOCK_A &Ai = A[i];
     BLOCK_ABT *ABTi = ABT[i];
-    Block::AddABTToUpper(Ai, B[i][0], ABTi[i]);
+    Element::AddABTToUpper(Ai, B[i][0], ABTi[i]);
     for (int j = i + 1; j < N; ++j) {
-      Block::AddABTTo(Ai, B[j][0], ABTi[j]);
+      Element::AddABTTo(Ai, B[j][0], ABTi[j]);
     }
   }
 }
@@ -729,7 +797,7 @@ inline void EigenConvert(const EigenMatrixXf &e_A, CC &A, const bool symmetric =
 #ifdef CFG_DEBUG
   UT_ASSERT(Nrx6 % 6 == 0 && Ncx6 % 6 == 0);
 #endif
-  A.Resize(Nr, Nc, false, symmetric);
+  A.Resize(Nr, Nc, symmetric);
   for (int i1 = 0, j1 = 0; i1 < Nr; ++i1, j1 += 6) {
     for (int i2 = symmetric ? i1 : 0, j2 = symmetric ? j1 : 0; i2 < Nc; ++i2, j2 += 6) {
       A[i1][i2] = EigenMatrix6x6f(e_A.block<6, 6>(j1, j2)).GetAlignedMatrix6x6f();
@@ -754,8 +822,9 @@ inline bool EigenAssertEqual(const EigenMatrixXf &e_A, const CC &A,
         } else {
           scc = e_A1.AssertZero(verbose, _str) && scc;
         }
-        if (i2 == i1)
+        if (i2 == i1) {
           continue;
+        }
         const EigenMatrix6x6f e_A3 = EigenMatrix6x6f(e_A.block<6, 6>(j2, j1).transpose());
         scc = e_A1.AssertEqual(e_A3, verbose, str + UT::String("[%d][%d]", i2, i1)) && scc;
       }
@@ -851,22 +920,24 @@ class Pose {
         return m_JcT.BindSize(N) + m_JTAc0.BindSize(N) + m_JTAc.BindSize(N, N, true) +
                m_Aec.BindSize(N);
       }
-      inline void Set(const ErrorJacobian &Je/*, const LA::AlignedMatrix2x3f &Jr*/, const xp128f &w,
-                      const Block::RR &Arr, const Vector::RC &Arc, const Matrix::CC &Acc) {
-        m_r = !Arc.Empty();
+      inline void Set(const bool g, const ErrorJacobian &Je/*, const LA::AlignedMatrix2x3f &Jr*/,
+                      const xp128f &w, const Element::RR &Arr, const Vector::RC &Arc,
+                      const Matrix::CC &Acc) {
+        //m_g = !Arc.Empty();
+        m_g = g;
         Je.m_J.m_Jc.GetTranspose(m_JcT);
         const int N = m_JcT.Size(), _N = N + 1;
 #ifdef CFG_DEBUG
-        if (m_r) {
+        if (m_g) {
           UT_ASSERT(Arc.Size() == N);
         }
         UT_ASSERT(Acc.GetRows() == N && Acc.GetColumns() == N);
 #endif
         m_JTAc0.Resize(N);
         m_Aec.Resize(N);
-        if (m_r) {
-          Block::RR wArr;
-          Block::RC wArc;
+        if (m_g) {
+          Element::RR wArr;
+          Element::RC wArc;
           LA::AlignedMatrix2x3f SArp, SArr, _Arp, _Arr;
           LA::AlignedMatrix3x3f _JTAc;
           LA::AlignedVector3f _Aec;
@@ -880,19 +951,19 @@ class Pose {
           for (int i = 0; i < N; ++i) {
             Arc[i].GetScaled(w, wArc);
             wArc.Get(_Arp, _Arr);
-            const Block::JC &_JcT = m_JcT[i];
+            const Element::JC &_JcT = m_JcT[i];
             LA::AlignedMatrix2x3f::AddABTTo(_Arp, _JcT.m_Jpp1, SArp);
             LA::AlignedMatrix2x3f::AddABTTo(_Arp, _JcT.m_Jpr1, SArr);
             LA::AlignedMatrix2x3f::AddABTTo(_Arr, _JcT.m_Jrr1, SArr);
-            const Block::EC &_ec = Je.m_e.m_ec[i];
+            const Element::EC &_ec = Je.m_e.m_ec[i];
             LA::AlignedMatrix2x3f::AddAbTo(_Arp, _ec.m_ep, m_Aer);
             LA::AlignedMatrix2x3f::AddAbTo(_Arr, _ec.m_er, m_Aer);
 
-            Block::CC &JTAc = m_JTAc0[i];
+            Element::CC &JTAc = m_JTAc0[i];
             JTAc.MakeZero3x6();
             LA::AlignedMatrix2x3f::ATB(Jr, _Arp, _JTAc);  JTAc.Set30(_JTAc);
             LA::AlignedMatrix2x3f::ATB(Jr, _Arr, _JTAc);  JTAc.Set33(_JTAc);
-            Block::C &Aec = m_Aec[i];
+            Element::C &Aec = m_Aec[i];
             LA::AlignedMatrix2x3f::ATb(_Arp, erx, ery, _Aec);   Aec.Set012(_Aec);
             LA::AlignedMatrix2x3f::ATb(_Arr, erx, ery, _Aec);   Aec.Set345(_Aec);
           }
@@ -901,14 +972,14 @@ class Pose {
           m_JTAc0.MakeZero();
           m_Aec.MakeZero();
         }
-        Block::CC wAcc;
+        Element::CC wAcc;
         LA::AlignedMatrix3x3f _App, _Apr, _Arp, _Arr;
-        m_JTAc.Resize(N, N, false, true);
+        m_JTAc.Resize(N, N, true);
         for (int i = 0; i < N; ++i) {
-          Block::CC &JTAc1 = m_JTAc0[i];
-          Block::C &Aec = m_Aec[i];
+          Element::CC &JTAc1 = m_JTAc0[i];
+          Element::C &Aec = m_Aec[i];
           for (int j = 0; j < N; ++j) {
-            const Block::JC &_JcT = m_JcT[j];
+            const Element::JC &_JcT = m_JcT[j];
             if (i <= j) {
               Acc[i][j].GetScaled(w, wAcc);
             } else {
@@ -923,13 +994,13 @@ class Pose {
             LA::AlignedMatrix6x6f::AddABTTo33(_JcT.m_Jpr1, _Arp, JTAc1);
             LA::AlignedMatrix6x6f::AddABTTo33(_JcT.m_Jrr1, _Arr, JTAc1);
             if (j <= i) {
-              Block::CC &JTAc2 = m_JTAc[j][i];
+              Element::CC &JTAc2 = m_JTAc[j][i];
               LA::AlignedMatrix6x6f::ABTTo00(_JcT.m_Jpp2, _App, JTAc2);
               LA::AlignedMatrix6x6f::ABTTo03(_JcT.m_Jpp2, _Arp, JTAc2);
               LA::AlignedMatrix6x6f::ABTTo30(_JcT.m_Jrr2, _Apr, JTAc2);
               LA::AlignedMatrix6x6f::ABTTo33(_JcT.m_Jrr2, _Arr, JTAc2);
             }
-            const Block::EC &_ec = Je.m_e.m_ec[j];
+            const Element::EC &_ec = Je.m_e.m_ec[j];
             LA::AlignedMatrix3x3f::AddAbTo(_App, _ec.m_ep, &Aec.v0());
             LA::AlignedMatrix3x3f::AddAbTo(_Apr, _ec.m_er, &Aec.v0());
             LA::AlignedMatrix3x3f::AddAbTo(_Arp, _ec.m_ep, &Aec.v3());
@@ -937,21 +1008,21 @@ class Pose {
           }
         }
       }
-      inline void Get(const LA::AlignedMatrix2x3f &Jr, const xp128f &w, const Block::R &br,
+      inline void Get(const LA::AlignedMatrix2x3f &Jr, const xp128f &w, const Element::R &br,
                       const Vector::C &bc, Matrix::CC *A, Vector::C *b) const {
         const int N = m_JcT.Size(), _N = N + 1;
 #ifdef CFG_DEBUG
         UT_ASSERT(bc.Size() == N);
 #endif
-        A->Resize(_N, _N, false, true);
+        A->Resize(_N, _N, true);
         b->Resize(_N);
         Matrix::CC &_A = *A;
         Vector::C &_b = *b;
 
-        Block::CC &A00 = _A[0][0];
-        Block::C &b0 = _b[0];
-        if (m_r) {
-          Block::R wbr;
+        Element::CC &A00 = _A[0][0];
+        Element::C &b0 = _b[0];
+        if (m_g) {
+          Element::R wbr;
           LA::AlignedMatrix2x3f _AJrp, _AJrr;
           LA::AlignedMatrix3x3f _A;
           LA::AlignedVector3f _b;
@@ -959,7 +1030,7 @@ class Pose {
           A00.MakeZero3x3();
           LA::AlignedMatrix2x3f::ATB(_AJrp, Jr, _A);        A00.Set03(_A);
           LA::AlignedMatrix2x3f::ATBToUpper(_AJrr, Jr, _A); A00.Set33(_A);
-          Block::R Aepbr;
+          Element::R Aepbr;
           br.GetScaled(w[0], wbr);
           LA::Vector2f::apb(wbr, m_Aer, Aepbr);
           b0.MakeZero012();
@@ -969,19 +1040,19 @@ class Pose {
           A00.MakeZero();
           b0.MakeZero();
         }
-        Block::C wbc;
+        Element::C wbc;
         LA::AlignedMatrix3x3f _JTApp, _JTApr, _JTArp, _JTArr;
-        Block::C Aepbc;
+        Element::C Aepbc;
         LA::AlignedVector3f Aepbp, Aepbr;
         for (int i = 0, _i = 1; i < N; ++i, ++_i) {
-          const Block::JC &JTi = m_JcT[i];
+          const Element::JC &JTi = m_JcT[i];
           m_JTAc0[i].Get(_JTApp, _JTApr, _JTArp, _JTArr);
           LA::SymmetricMatrix6x6f::AddABTTo00(_JTApp, JTi.m_Jpp1, A00);
           LA::AlignedMatrix6x6f::AddABTTo03(_JTApp, JTi.m_Jpr1, A00);
           LA::AlignedMatrix6x6f::AddABTTo03(_JTApr, JTi.m_Jrr1, A00);
           LA::SymmetricMatrix6x6f::AddABTTo33(_JTArp, JTi.m_Jpr1, A00);
           LA::SymmetricMatrix6x6f::AddABTTo33(_JTArr, JTi.m_Jrr1, A00);
-          Block::CC &A0i = _A[0][_i];
+          Element::CC &A0i = _A[0][_i];
           LA::AlignedMatrix6x6f::ABTTo00(_JTApp, JTi.m_Jpp2, A0i);
           LA::AlignedMatrix6x6f::ABTTo03(_JTApr, JTi.m_Jrr2, A0i);
           LA::AlignedMatrix6x6f::ABTTo30(_JTArp, JTi.m_Jpp2, A0i);
@@ -992,22 +1063,22 @@ class Pose {
           LA::AlignedMatrix3x3f::AddAbTo(JTi.m_Jpp1, Aepbp, &b0.v0());
           LA::AlignedMatrix3x3f::AddAbTo(JTi.m_Jpr1, Aepbp, &b0.v3());
           LA::AlignedMatrix3x3f::AddAbTo(JTi.m_Jrr1, Aepbr, &b0.v3());
-          Block::C &bi = _b[_i];
+          Element::C &bi = _b[_i];
           LA::AlignedMatrix3x3f::Ab(JTi.m_Jpp2, Aepbp, &bi.v0());
           LA::AlignedMatrix3x3f::Ab(JTi.m_Jrr2, Aepbr, &bi.v3());
         }
         for (int i = 0, _i = 1; i < N; ++i, ++_i) {
-          const Block::CC *JTAi = m_JTAc[i];
+          const Element::CC *JTAi = m_JTAc[i];
           JTAi[i].Get(_JTApp, _JTApr, _JTArp, _JTArr);
-          const Block::JC &JTi = m_JcT[i];
-          Block::CC *Ai = _A[_i], &Aii = Ai[_i];
+          const Element::JC &JTi = m_JcT[i];
+          Element::CC *Ai = _A[_i], &Aii = Ai[_i];
           LA::SymmetricMatrix6x6f::ABTTo00(_JTApp, JTi.m_Jpp2, Aii);
           LA::AlignedMatrix6x6f::ABTTo03(_JTApr, JTi.m_Jrr2, Aii);
           LA::AlignedMatrix6x6f::ABTTo30(_JTArp, JTi.m_Jpp2, Aii);
           LA::SymmetricMatrix6x6f::ABTTo33(_JTArr, JTi.m_Jrr2, Aii);
           for (int j = i + 1, _j = j + 1; j < N; ++j, ++_j) {
-            const Block::JC &JTj = m_JcT[j];
-            Block::CC &Aij = Ai[_j];
+            const Element::JC &JTj = m_JcT[j];
+            Element::CC &Aij = Ai[_j];
             JTAi[j].Get(_JTApp, _JTApr, _JTArp, _JTArr);
             LA::AlignedMatrix6x6f::ABTTo00(_JTApp, JTj.m_Jpp2, Aij);
             LA::AlignedMatrix6x6f::ABTTo03(_JTApr, JTj.m_Jrr2, Aij);
@@ -1018,12 +1089,12 @@ class Pose {
         A->SetLowerFromUpper();
       }
      public:
-      bool m_r;
+      bool m_g;
       Vector::JC m_JcT;
-      Block::RC m_JTArT0;
+      Element::RC m_JTArT0;
       Vector::CC m_JTAc0;
       Matrix::CC m_JTAc;
-      Block::R m_Aer;
+      Element::R m_Aer;
       Vector::C m_Aec;
     };
    public:
@@ -1031,16 +1102,25 @@ class Pose {
     inline Factor(const Factor &A) { *this = A; }
     inline void operator = (const Factor &A) {
       m_Je = A.m_Je;
+      m_w = A.m_w;
       m_F = A.m_F;
       m_A.Set(A.m_A);
       m_b.Set(A.m_b);
     }
-    inline void MakeZero(const int N = -1) {
+    //inline void MakeZero() {
+    //  m_Je.MakeZero();
+    //  m_w = 0.0f;
+    //  m_F = 0.0f;
+    //  m_A.MakeZero();
+    //  m_b.MakeZero();
+    //}
+    inline void MakeZero(const int N/* = -1*/) {
       m_Je.MakeZero();
+      m_w = 0.0f;
       m_F = 0.0f;
       if (N >= 0) {
         const int _N = N + 1;
-        m_A.Resize(_N, _N, true);
+        m_A.Resize(_N, _N, true, true);
         m_b.Resize(_N);
       }
       m_A.MakeZero();
@@ -1067,12 +1147,14 @@ class Pose {
     }
     inline void SaveB(FILE *fp) const {
       m_Je.SaveB(fp);
+      UT::SaveB(m_w, fp);
       UT::SaveB(m_F, fp);
       m_A.SaveB(fp);
       m_b.SaveB(fp);
     }
     inline void LoadB(FILE *fp) {
       m_Je.LoadB(fp);
+      UT::LoadB(m_w, fp);
       UT::LoadB(m_F, fp);
       m_A.LoadB(fp);
       m_b.LoadB(fp);
@@ -1085,7 +1167,7 @@ class Pose {
     }
    public:
     ErrorJacobian m_Je;
-    float m_F;
+    float m_w, m_F;
     Matrix::CC m_A;
     Vector::C m_b;
   };
@@ -1129,7 +1211,7 @@ class Pose {
         m_ESr.Accumulate(ESError(LA::AlignedVector3f(e.m_er, 0.0f), UT_FACTOR_RAD_TO_DEG), -1.0f, iFrm);
       const int N = e.Size();
       for (int i = 0; i < N; ++i) {
-        const Block::EC &ec = e.m_ec[i];
+        const Element::EC &ec = e.m_ec[i];
         m_ESp.Accumulate(ESError(ec.m_ep), -1.0f, iFrm);
         m_ESr.Accumulate(ESError(ec.m_er, UT_FACTOR_RAD_TO_DEG), -1.0f, iFrm);
       }
@@ -1165,6 +1247,7 @@ class Pose {
     m_Acc.Set(Z.m_Acc);
     m_br = Z.m_br;
     m_bc.Set(Z.m_bc);
+    m_xTb = Z.m_xTb;
   }
   inline bool operator < (const int iKFr) const { return m_iKFr < iKFr; }
 
@@ -1176,13 +1259,14 @@ class Pose {
     m_Zps.Resize(0);
     m_Arr.Invalidate();
     m_Arc.Resize(0);
-    m_Acc.Resize(0, 0, false, true);
+    m_Acc.Resize(0, 0, true);
     m_br.Invalidate();
     m_bc.Resize(0);
   }
 
   inline void Initialize(const float w, const int iKFr, const Rigid3D &Tr, const float s2r,
-                         const bool newKF, const Rigid3D *T0 = NULL) {
+                         const bool newKF, const Rigid3D *T0 = NULL,
+                         const float s2cp = 0.0f, const float s2cr = 0.0f) {
     m_iKFr = iKFr;
     //Rr.GetTranspose(m_RrT);
     const float arr = UT::Inverse(s2r, w);
@@ -1192,24 +1276,25 @@ class Pose {
       m_iKFs.resize(0);
       m_Zps.Resize(0);
       m_Arc.Resize(0);
-      m_Acc.Resize(0, 0, false, true);
+      m_Acc.Resize(0, 0, true);
       m_bc.Resize(0);
     } else {
-      m_iKFs.resize(1);                 m_iKFs[0] = INT_MAX;
-      m_Zps.Resize(1);                  m_Zps[0].Invalidate();
-      m_Arc.Resize(1);                  m_Arc[0].MakeZero();
-      m_Acc.Resize(1, 1, false, true);  m_Acc[0][0].MakeZero();
-      m_bc.Resize(1);                   m_bc[0].MakeZero();
+      m_iKFs.resize(1);         m_iKFs[0] = INT_MAX;
+      m_Zps.Resize(1);          m_Zps[0].Invalidate();
+      m_Arc.Resize(1);          m_Arc[0].MakeZero();
+      m_Acc.Resize(1, 1, true); m_Acc[0][0].MakeZero();
+      m_bc.Resize(1);           m_bc[0].MakeZero();
       if (T0) {
         Rigid3D::ABI(Tr, *T0, m_Zps[0]);
       }
+      m_Acc[0][0].SetDiagonal(UT::Inverse(s2cp, w), UT::Inverse(s2cr, w));
     }
     Tr.Rotation3D::GetTranspose(m_Zps.Push());
   }
   inline bool Initialize(const float w, const int iKF1, const int iKF2, const Rigid3D &T,
                          const LA::AlignedMatrix6x6f &S) {
-    m_Acc.Resize(1, 1, false, true);
-    Block::CC &A = m_Acc[0][0];
+    m_Acc.Resize(1, 1, true);
+    Element::CC &A = m_Acc[0][0];
     if (!S.GetInverseLDL(A, NULL)) {
       return false;
     }
@@ -1230,13 +1315,13 @@ class Pose {
 
 #ifdef CFG_DEBUG
   inline void DebugSetMeasurement(const Rigid3D &Tr, const bool newKF, const Rigid3D *T0 = NULL) {
+    Tr.Rotation3D::GetTranspose(m_Zps.Back());
     if (!newKF && T0) {
       Rigid3D::ABI(Tr, *T0, m_Zps[0]);
     }
-    //Tr.Rotation3D::GetTranspose(m_Zps.Back());
   }
 #endif
-
+  
   inline void Insert(const float w, const int i, const int iKF, const Rigid3D &T, const float s2p,
                      const float s2r, AlignedVector<float> *work) {
 #ifdef CFG_DEBUG
@@ -1246,9 +1331,16 @@ class Pose {
     m_Zps.Insert(i);
     T.GetInverse(m_Zps[i]);
     m_Arc.InsertZero(i);
-    m_Acc.InsertZero(i, work);
+    m_Acc.InsertZero(i, 1, work);
     m_Acc[i][i].SetDiagonal(UT::Inverse(s2p, w), UT::Inverse(s2r, w));
     m_bc.InsertZero(i);
+  }
+  inline void Erase(const int i) {
+    m_iKFs.erase(m_iKFs.begin() + i);
+    m_Zps.Erase(i);
+    m_Arc.Erase(i);
+    m_Acc.Erase(i);
+    m_bc.Erase(i);
   }
   inline void DeleteKeyFrame(const int iKF, const std::vector<int>::iterator *i = NULL) {
     if (m_iKFr == iKF) {
@@ -1283,76 +1375,90 @@ class Pose {
 #endif
     Rigid3D::ABI(Tr, Ti, m_Zps[i]);
   }
+//  inline void GetReferencePose(const Rigid3D &Tr, Rigid3D *_Tr, Rigid3D *TrI) const {
+//#ifdef CFG_DEBUG
+//    UT_ASSERT(m_Zps.Size() == static_cast<int>(m_iKFs.size()) + 1);
+//#endif
+//    //const Rotation3D &RrT = m_RrT;
+//    const Rotation3D RrT = m_Zps.Back();
+//    Rotation3D dR = RrT * Tr;
+//    dR.SetEulerAngleZ(-dR.GetRodriguesZ());
+//    Rotation3D::AB(dR, RrT, *TrI);
+//    //*TrI = RrT;
+//    const Point3D pr = Tr.GetPosition();
+//    TrI->SetTranslation(pr);
+//    TrI->GetInverse(*_Tr);
+//  }
   inline void GetReferencePose(const Rigid3D &Tr, Rigid3D *_Tr, Rigid3D *TrI) const {
 #ifdef CFG_DEBUG
     UT_ASSERT(m_Zps.Size() == static_cast<int>(m_iKFs.size()) + 1);
 #endif
-    //const Rotation3D &RrT = m_RrT;
-    const Rotation3D RrT = m_Zps.Back();
-    Rotation3D dR = RrT * Tr;
-    dR.SetEulerAngleZ(-dR.GetRodriguesZ());
-    Rotation3D::AB(dR, RrT, *TrI);
+    *TrI = m_Zps.Back();
     const Point3D pr = Tr.GetPosition();
     TrI->SetTranslation(pr);
     TrI->GetInverse(*_Tr);
   }
-  inline void GetPose(const Rigid3D &TrI, const int i, Rigid3D *Tri, Rigid3D *Ti) const {
-#ifdef CFG_DEBUG
-    UT_ASSERT(i < static_cast<int>(m_iKFs.size()));
-#endif
-    m_Zps[i].GetInverse(*Tri);
-    Rigid3D::ABI(*Tri, TrI, *Ti);
-  }
+//  inline void GetPose(const Rigid3D &TrI, const int i, Rigid3D *Tri, Rigid3D *Ti) const {
+//#ifdef CFG_DEBUG
+//    UT_ASSERT(i < static_cast<int>(m_iKFs.size()));
+//#endif
+//    m_Zps[i].GetInverse(*Tri);
+//    Rigid3D::ABI(*Tri, TrI, *Ti);
+//  }
 
-  Rotation3D GetReferenceRotationState(const Rotation3D &R) const {
+  inline Rotation3D GetReferenceRotationState(const Rotation3D &R) const {
 #ifdef CFG_DEBUG
     UT_ASSERT(m_Zps.Size() == static_cast<int>(m_iKFs.size()) + 1);
 #endif
     return R.GetTranspose();
   }
-  Rotation3D GetReferenceRotationMeasurement(const float *x = NULL) const {
+  inline Rotation3D GetReferenceRotationMeasurement(const float *x/* = NULL*/,
+                                                    const float eps) const {
 #ifdef CFG_DEBUG
     UT_ASSERT(m_Zps.Size() == static_cast<int>(m_iKFs.size()) + 1);
 #endif
     if (x) {
       Rotation3D dR;
       const LA::Vector2f _x(x);
-      dR.SetRodriguesXY(_x);
+      dR.SetRodriguesXY(_x, eps);
       dR.Transpose();
       return dR * m_Zps.Back();
     } else {
       return m_Zps.Back();
     }
   }
-  LA::AlignedVector3f GetReferenceRotationError(const Rotation3D &R, const float *x = NULL) const {
-    const Rotation3D eR = GetReferenceRotationMeasurement(x) / GetReferenceRotationState(R);
-    const LA::Vector2f e = eR.GetRodriguesXY();
+  inline LA::AlignedVector3f GetReferenceRotationError(const Rotation3D &R, const float *x/* = NULL*/,
+                                                       const float eps) const {
+    const Rotation3D eR = GetReferenceRotationMeasurement(x, eps) / GetReferenceRotationState(R);
+    const LA::Vector2f e = eR.GetRodriguesXY(eps);
     return LA::AlignedVector3f(e.x(), e.y(), 0.0f);
   }
-  Rotation3D GetRotationState(const Rotation3D &R1, const Rotation3D &R2) const {
+  inline Rotation3D GetRotationState(const Rotation3D &R1, const Rotation3D &R2) const {
     return R1 / R2;
   }
-  const Rotation3D GetRotationMeasurement(const int i, const float *x = NULL) const {
+  inline const Rotation3D GetRotationMeasurement(const int i, const float *x/* = NULL*/,
+                                                 const float eps) const {
     if (x) {
       Rotation3D dR;
       const LA::AlignedVector3f _x(x);
-      dR.SetRodrigues(_x);
+      dR.SetRodrigues(_x, eps);
       dR.Transpose();
       return dR * m_Zps[i];
     } else {
       return m_Zps[i];
     }
   }
-  LA::AlignedVector3f GetRotationError(const Rotation3D &R1, const Rotation3D &R2, const int i,
-                                       const float *x = NULL) const {
-    const Rotation3D eR = GetRotationMeasurement(i, x) / GetRotationState(R1, R2);
-    return eR.GetRodrigues();
+  inline LA::AlignedVector3f GetRotationError(const Rotation3D &R1, const Rotation3D &R2,
+                                              const int i, const float *x/* = NULL*/,
+                                              const float eps) const {
+    const Rotation3D eR = GetRotationMeasurement(i, x, eps) / GetRotationState(R1, R2);
+    return eR.GetRodrigues(eps);
   }
-  LA::AlignedVector3f GetPositionState(const Rigid3D &C1, const Rigid3D &C2) const {
+  inline LA::AlignedVector3f GetPositionState(const Rigid3D &C1, const Rigid3D &C2) const {
     const Point3D p2 = C2.GetPosition();
     return C1.GetTranslation() + C1.GetAppliedRotation(p2);
   }
-  LA::AlignedVector3f GetPositionMeasurement(const int i, const float *x = NULL) const {
+  inline LA::AlignedVector3f GetPositionMeasurement(const int i, const float *x = NULL) const {
     const LA::AlignedVector3f p12 = m_Zps[i].GetTranslation();
     if (x) {
       return p12 + LA::AlignedVector3f(x);
@@ -1360,33 +1466,37 @@ class Pose {
       return p12;
     }
   }
-  LA::AlignedVector3f GetPositionError(const Rigid3D &C1, const Rigid3D &C2, const int i,
-                                       const float *x = NULL) const {
+  inline LA::AlignedVector3f GetPositionError(const Rigid3D &C1, const Rigid3D &C2,
+                                              const int i, const float *x = NULL) const {
     return GetPositionState(C1, C2) - GetPositionMeasurement(i, x);
   }
-  inline void GetError(const Rigid3D &C1, const Rigid3D &C2, const int i, Block::EC *e) const {
+  inline void GetError(const Rigid3D &C1, const Rigid3D &C2, const int i, Element::EC *e,
+                       const float eps) const {
+    GetError(C1, C2, m_Zps[i], e, eps);
+  }
+  static inline void GetError(const Rigid3D &C1, const Rigid3D &C2, const Rigid3D &Z21,
+                              Element::EC *e, const float eps) {
     const LA::AlignedVector3f t1 = C1.GetTranslation();
     const LA::AlignedVector3f t2 = C2.GetTranslation();
-    const Rigid3D &T21 = m_Zps[i];
     const Rotation3D R21 = Rotation3D(C1 / C2);
     R21.Apply(t2, e->m_ep);
     LA::AlignedVector3f::amb(t1, e->m_ep, e->m_ep);
-    const LA::AlignedVector3f p12 = T21.GetTranslation();
+    const LA::AlignedVector3f p12 = Z21.GetTranslation();
     e->m_ep -= p12;
-    const Rotation3D eR = Rotation3D(T21) / R21;
-    eR.GetRodrigues(e->m_er);
+    const Rotation3D eR = Rotation3D(Z21) / R21;
+    eR.GetRodrigues(e->m_er, eps);
   }
-  inline void GetError(const AlignedVector<Rigid3D> &Cs, Error *e) const {
+  inline void GetError(const AlignedVector<Rigid3D> &Cs, Error *e, const float eps) const {
     Rotation3D eR, Rt;
     LA::AlignedVector3f p2, p12;
     const Rigid3D &C1 = Cs[m_iKFr];
-    //if (m_Arc.Empty()) {
+    const int N = static_cast<int>(m_iKFs.size());
+    //if (m_Zps.Size() == N) {
     //  e->m_er.Invalidate();
     //} else {
     //  Rotation3D::AB(m_RrT, C1, eR);
     //  eR.GetRodriguesXY(e->m_er);
     //}
-    const int N = static_cast<int>(m_iKFs.size());
     if (m_Zps.Size() == N) {
       e->m_er.Invalidate();
     } else {
@@ -1394,7 +1504,7 @@ class Pose {
       UT_ASSERT(m_Zps.Size() == N + 1);
 #endif
       Rotation3D::AB(m_Zps.Back(), C1, eR);
-      eR.GetRodriguesXY(e->m_er);
+      eR.GetRodriguesXY(e->m_er, eps);
     }
     const LA::AlignedVector3f t1 = C1.GetTranslation();
     e->Resize(N);
@@ -1402,7 +1512,7 @@ class Pose {
       const Rigid3D &T21 = m_Zps[i];
       const int iKF = m_iKFs[i];
       const Rigid3D &C2 = iKF == INT_MAX ? Cs.Back() : Cs[iKF];
-      Block::EC &ec = e->m_ec[i];
+      Element::EC &ec = e->m_ec[i];
 #if 0
       Rotation3D::ABT(C1, C2, R21);
       C2.GetTranslation(t2);
@@ -1420,7 +1530,7 @@ class Pose {
       ec.m_ep -= p12;
       Rotation3D::AB(T21, C2, Rt);
       Rotation3D::ABT(Rt, C1, eR);
-      eR.GetRodrigues(ec.m_er);
+      eR.GetRodrigues(ec.m_er, eps);
 #endif
     }
   }
@@ -1430,7 +1540,7 @@ class Pose {
     e->m_er = Je.m_e.m_er;
     const int N = static_cast<int>(m_iKFs.size());
     //if (xr1 && !m_Arc.Empty()) {
-    if (xr1 && m_Zps.Size() > N) {
+    if (xr1 && m_Zps.Size() != N) {
       LA::AlignedMatrix2x3f::AddAbTo(Je.m_J.m_Jr, *xr1, e->m_er);
       //LA::Matrix2x3f::AddAbTo(Je.m_J.m_Jr, *xr1, e->m_er);
     }
@@ -1438,9 +1548,9 @@ class Pose {
     for (int i = 0; i < N; ++i) {
       const int iKF2 = m_iKFs[i];
       const LA::AlignedVector3f *xp2 = xps[iKF2], *xr2 = xrs[iKF2];
-      Block::EC &ec = e->m_ec[i];
+      Element::EC &ec = e->m_ec[i];
       ec = Je.m_e.m_ec[i];
-      const Block::JC &Jc = Je.m_J.m_Jc[i];
+      const Element::JC &Jc = Je.m_J.m_Jc[i];
       if (xp1) {
         LA::AlignedMatrix3x3f::AddAbTo(Jc.m_Jpp1, *xp1, (float *) &ec.m_ep);
       }
@@ -1456,12 +1566,14 @@ class Pose {
       }
     }
   }
-  inline void GetErrorJacobian(const AlignedVector<Rigid3D> &Cs, ErrorJacobian *Je/*, LA::AlignedMatrix2x3f *Jr*/) const {
+  inline void GetErrorJacobian(const AlignedVector<Rigid3D> &Cs, ErrorJacobian *Je
+                               /*, LA::AlignedMatrix2x3f *Jr*/, const float eps) const {
     Rotation3D eR, Rt;
     LA::AlignedVector3f er, t1, p2, p12;
     const Rigid3D &C1 = Cs[m_iKFr];
     C1.GetTranslation(t1);
-    //if (m_Arc.Empty()) {
+    const int N = static_cast<int>(m_iKFs.size());
+    //if (N == m_Zps.Size()) {
     //  Je->m_e.m_er.Invalidate();
     //  Je->m_J.m_Jr.Invalidate();
     //} else {
@@ -1471,16 +1583,15 @@ class Pose {
     //  Rotation3D::GetRodriguesJacobianInverseXY(er, Je->m_J.m_Jr);
     //  Je->m_J.m_Jr = Je->m_J.m_Jr * eR;
     //}
-    const int N = static_cast<int>(m_iKFs.size());
     if (N == m_Zps.Size()) {
       Je->m_e.m_er.Invalidate();
       Je->m_J.m_Jr.Invalidate();
     } else {
       Rotation3D::AB(m_Zps.Back(), C1, eR);
-      eR.GetRodrigues(er);
+      eR.GetRodrigues(er, eps);
       Je->m_e.m_er.Set(er);
       LA::AlignedMatrix2x3f &Jr = Je->m_J.m_Jr;
-      Rotation3D::GetRodriguesJacobianInverseXY(er, Jr);
+      Rotation3D::GetRodriguesJacobianInverseXY(er, Jr, eps);
       Jr = Jr * eR;
       //Je->m_J.m_Jr.Set(*Jr);
     }
@@ -1490,8 +1601,8 @@ class Pose {
       const int iKF = m_iKFs[i];
       const Rigid3D &C2 = iKF == INT_MAX ? Cs.Back() : Cs[iKF];
       const Rigid3D &T21 = m_Zps[i];
-      Block::EC &ec = Je->m_e.m_ec[i];
-      Block::JC &Jc = Je->m_J.m_Jc[i];
+      Element::EC &ec = Je->m_e.m_ec[i];
+      Element::JC &Jc = Je->m_J.m_Jc[i];
       C2.GetPosition(p2);
       C1.ApplyRotation(p2, ec.m_ep);
       ec.m_ep += t1;
@@ -1502,29 +1613,31 @@ class Pose {
       Jc.m_Jpp2.GetMinus(Jc.m_Jpp1);
       Rotation3D::AB(T21, C2, Rt);
       Rotation3D::ABT(Rt, C1, eR);
-      eR.GetRodrigues(ec.m_er);
-      Rotation3D::GetRodriguesJacobianInverse(ec.m_er, Jc.m_Jrr1);
+      eR.GetRodrigues(ec.m_er, eps);
+      Rotation3D::GetRodriguesJacobianInverse(ec.m_er, Jc.m_Jrr1, eps);
       LA::AlignedMatrix3x3f::AB(Jc.m_Jrr1, Rt, Jc.m_Jrr2);
       Jc.m_Jrr2.GetMinus(Jc.m_Jrr1);
     }
   }
   inline void GetFactor(const float w, const AlignedVector<Rigid3D> &Cs, Factor *A,
-                        Factor::Auxiliary *U) const {
+                        Factor::Auxiliary *U, const float eps) const {
     //LA::AlignedMatrix2x3f Jr;
-    GetErrorJacobian(Cs, &A->m_Je/*, &Jr*/);
+    GetErrorJacobian(Cs, &A->m_Je/*, &Jr*/, eps);
     const xp128f _w = xp128f::get(w);
-    U->Set(A->m_Je/*, Jr*/, _w, m_Arr, m_Arc, m_Acc);
+    U->Set(m_Zps.Size() != static_cast<int>(m_iKFs.size()), A->m_Je/*, Jr*/,
+           _w, m_Arr, m_Arc, m_Acc);
+    A->m_w = w;
     A->m_F = GetCost(w, A->m_Je.m_e, U->m_Aer, U->m_Aec);
     U->Get(A->m_Je.m_J.m_Jr, _w, m_br, m_bc, &A->m_A, &A->m_b);
   }
-  inline float GetCost(const float w, const Error &e, const Block::R &Aer,
+  inline float GetCost(const float w, const Error &e, const Element::R &Aer,
                        const Vector::C &Aec) const {
     float F = 0.0f;
     const float s = w + w;
     const int N = e.Size();
     //if (!m_Arc.Empty()) {
-    if (m_Zps.Size() > N) {
-      Block::R br;
+    if (m_Zps.Size() != N) {
+      Element::R br;
       m_br.GetScaled(s, br);
       br += Aer;
       F += e.m_er.Dot(br);
@@ -1533,12 +1646,12 @@ class Pose {
 #ifdef CFG_DEBUG
     UT_ASSERT(m_bc.Size() == N && Aec.Size() == N);
 #endif
-    Block::C bc;
+    Element::C bc;
     LA::AlignedVector6f ec;
     for (int i = 0; i < N; ++i) {
       m_bc[i].GetScaled(_s, bc);
       bc += Aec[i];
-      const Block::EC &_ec = e.m_ec[i];
+      const Element::EC &_ec = e.m_ec[i];
       ec.Set(_ec.m_ep, _ec.m_er);
       F += ec.Dot(bc);
     }
@@ -1552,23 +1665,23 @@ class Pose {
 #ifdef CFG_DEBUG
     UT_ASSERT(m_bc.Size() == N);
 #endif
-    //const bool r = !m_Arc.Empty();
-    const bool r = m_Zps.Size() > N;
-    Block::R Sbr;
-    if (r) {
+    //const bool g = !m_Arc.Empty();
+    const bool g = m_Zps.Size() != N;
+    Element::R Sbr;
+    if (g) {
       LA::SymmetricMatrix2x2f::Ab(m_Arr, e.m_er, Sbr);
     }
     LA::AlignedMatrix2x3f Agp, Agr;
     LA::AlignedMatrix3x3f App, Apr, Arp, Arr;
     LA::AlignedVector3f bp, br;
     LA::AlignedVector6f _ec;
-    Block::C bc;
+    Element::C bc;
     const xp128f erx = xp128f::get(e.m_er.x()), ery = xp128f::get(e.m_er.y());
     //const xp128f _s = xp128f::get(s);
     for (int i = 0; i < N; ++i) {
-      if (r) {
+      if (g) {
         m_Arc[i].Get(Agp, Agr);
-        const Block::EC &ec = e.m_ec[i];
+        const Element::EC &ec = e.m_ec[i];
         LA::AlignedMatrix2x3f::AddAbTo(Agp, ec.m_ep, Sbr);
         LA::AlignedMatrix2x3f::AddAbTo(Agr, ec.m_er, Sbr);
         LA::AlignedMatrix2x3f::ATb(Agp, erx, ery, bp);
@@ -1587,7 +1700,7 @@ class Pose {
           Arp.Transpose();
           Arr.Transpose();
         }
-        const Block::EC &ec = e.m_ec[j];
+        const Element::EC &ec = e.m_ec[j];
         LA::AlignedMatrix3x3f::AddAbTo(App, ec.m_ep, &bc.v0());
         LA::AlignedMatrix3x3f::AddAbTo(Apr, ec.m_er, &bc.v0());
         LA::AlignedMatrix3x3f::AddAbTo(Arp, ec.m_ep, &bc.v3());
@@ -1596,11 +1709,11 @@ class Pose {
       //bc *= _s;
       bc += m_bc[i];
       bc += m_bc[i];
-      const Block::EC &ec = e.m_ec[i];
+      const Element::EC &ec = e.m_ec[i];
       _ec.Set(ec.m_ep, ec.m_er);
       F += _ec.Dot(bc);
     }
-    if (r) {
+    if (g) {
       //Sbr *= s;
       Sbr += m_br;
       Sbr += m_br;
@@ -1617,20 +1730,20 @@ class Pose {
   inline void GetReduction(const float w, const Factor &A, const AlignedVector<Rigid3D> &Cs,
                            const std::vector<const LA::AlignedVector3f *> &xps,
                            const std::vector<const LA::AlignedVector3f *> &xrs,
-                           Reduction *Ra, Reduction *Rp) const {
-    GetError(Cs, &Ra->m_e);
+                           Reduction *Ra, Reduction *Rp, const float eps) const {
+    GetError(Cs, &Ra->m_e, eps);
     GetError(A.m_Je, xps, xrs, &Rp->m_e);
     Ra->m_dF = A.m_F - (Ra->m_F = GetCost(w, Ra->m_e));
     Rp->m_dF = A.m_F - (Rp->m_F = GetCost(w, Rp->m_e));
   }
-  inline void GetResidual(const AlignedVector<Rigid3D> &Cs, Error *e, Vector::C *ec, Block::R *rr,
-                          Vector::C *rc) const {
-    GetError(Cs, e);
+  inline void GetResidual(const AlignedVector<Rigid3D> &Cs, Error *e, Vector::C *ec, Element::R *rr,
+                          Vector::C *rc, const float eps) const {
+    GetError(Cs, e, eps);
     const int N = static_cast<int>(m_iKFs.size());
     Vector::C &_ec = *ec;
     _ec.Resize(N);
     for (int i = 0; i < N; ++i) {
-      Block::EC &eci = e->m_ec[i];
+      Element::EC &eci = e->m_ec[i];
       _ec[i].Set(eci.m_ep, eci.m_er);
     }
     Vector::C &_rc = *rc;
@@ -1648,7 +1761,7 @@ class Pose {
     LA::AlignedMatrix6x6f AT;
     for (int i = 0; i < N; ++i) {
       const LA::AlignedVector6f &eci = _ec[i];
-      Block::C &rci = _rc[i];
+      Element::C &rci = _rc[i];
       for (int j = i; j < N; ++j) {
         LA::AlignedMatrix6x6f::AddAbTo(m_Acc[i][j], _ec[j], (float *) &rci);
         if (j == i) {
@@ -1696,6 +1809,7 @@ class Pose {
     m_Acc.SaveB(fp);
     m_br.SaveB(fp);
     m_bc.SaveB(fp);
+    UT::SaveB(m_xTb, fp);
   }
   inline void LoadB(FILE *fp) {
     UT::LoadB(m_iKFr, fp);
@@ -1707,6 +1821,7 @@ class Pose {
     m_Acc.LoadB(fp);
     m_br.LoadB(fp);
     m_bc.LoadB(fp);
+    UT::LoadB(m_xTb, fp);
   }
   inline void AssertConsistency() const {
     const int N = static_cast<int>(m_iKFs.size());
@@ -1727,9 +1842,17 @@ class Pose {
     m_Acc.AssertSymmetric();
   }
 
-  bool GetPriorMeasurement(const float w, LA::AlignedVectorXf *x, LA::AlignedMatrixXf *S) const;
-  bool GetPriorMeasurement(const float w, LA::AlignedVectorXf *x, LA::AlignedMatrixXf *S,
-                           AlignedVector<float> *work) const;
+  bool Marginalize(const int i, AlignedVector<float> *work, const float *eps = NULL);
+  bool MarginalizeUninformative(const float w, const float s2p, const float s2r,
+                                std::vector<int> *iks, AlignedVector<float> *work,
+                                const float *eps = NULL);
+  void SetPriorEquation(const Matrix::X &A, const Vector::X &b, const bool g = true);
+  void GetPriorEquation(Matrix::X *A, Vector::X *b = NULL, const bool symmetric = true,
+                        const bool g = true) const;
+  bool GetPriorMeasurement(const Element::T w, Matrix::X *S, Vector::X *x/* = NULL*/,
+                           Element::T *xTb/* = NULL*/, const Element::T *eps/* = NULL*/) const;
+  bool GetPriorMeasurement(const float w, LA::AlignedMatrixXf *S, LA::AlignedVectorXf *x,
+                           float *xTb, AlignedVector<float> *work, const float *eps = NULL) const;
 
  public:
 
@@ -1738,11 +1861,12 @@ class Pose {
   std::vector<int> m_iKFs;
   AlignedVector<Rigid3D> m_Zps;
 
-  Block::RR m_Arr;
+  Element::RR m_Arr;
   Vector::RC m_Arc;
   Matrix::CC m_Acc;
-  Block::R m_br;
+  Element::R m_br;
   Vector::C m_bc;
+  float m_xTb;
 
 #ifdef CFG_DEBUG_EIGEN
  public:
@@ -1753,7 +1877,7 @@ class Pose {
       m_e.Resize(2 + N * 6);
       m_e.block<2, 1>(0, 0) = EigenVector2f(e.m_er);
       for (int i = 0, j = 2; i < N; ++i, j += 6) {
-        const Block::EC &ec = e.m_ec[i];
+        const Element::EC &ec = e.m_ec[i];
         m_e.block<6, 1>(j, 0) = EigenVector6f(ec.m_ep, ec.m_er);
       }
     }
@@ -1767,7 +1891,7 @@ class Pose {
       e_Jc1.setZero();
       e_Jc2.setZero();
       for (int i = 0, j = 2, k = 6; i < N; ++i, j += 6, k += 6) {
-        const Block::JC &Jc = J.m_Jc[i];
+        const Element::JC &Jc = J.m_Jc[i];
         e_Jc1.block<3, 3>(0, 0) = EigenMatrix3x3f(Jc.m_Jpp1);
         e_Jc1.block<3, 3>(0, 3) = EigenMatrix3x3f(Jc.m_Jpr1);
         e_Jc1.block<3, 3>(3, 3) = EigenMatrix3x3f(Jc.m_Jrr1);
@@ -1788,7 +1912,7 @@ class Pose {
         scc = e_er.AssertEqual(e.m_er, verbose, str + ".m_er") && scc;
       }
       for (int i = 0, j = 2; i < N; ++i, j += 6) {
-        const Block::EC &ec = e.m_ec[i];
+        const Element::EC &ec = e.m_ec[i];
         const EigenVector6f e_ec1 = EigenVector6f(m_e.block<6, 1>(j, 0));
         const EigenVector6f e_ec2 = EigenVector6f(ec.m_ep, ec.m_er);
         scc = e_ec1.AssertEqual(e_ec2, verbose, UT::String(".m_ec[%d]", i)) && scc;
@@ -1812,7 +1936,7 @@ class Pose {
       EigenMatrix6x12f e_Jc1, e_Jc2;
       e_Jc2.setZero();
       for (int i = 0, j = 2, k = 6; i < N; ++i, j += 6, k += 6) {
-        const Block::JC &Jc = J.m_Jc[i];
+        const Element::JC &Jc = J.m_Jc[i];
         e_Jc1.block<6, 6>(0, 0) = m_J.block<6, 6>(j, 0);
         e_Jc1.block<6, 6>(0, 6) = m_J.block<6, 6>(j, k);
         e_Jc2.block<3, 3>(0, 0) = EigenMatrix3x3f(Jc.m_Jpp1);
@@ -1864,12 +1988,17 @@ class Pose {
    public:
     inline EigenPrior() {}
     inline EigenPrior(const EigenMatrixXf &e_A, const EigenVectorXf &e_b) : m_A(e_A), m_b(e_b) {}
-    inline EigenPrior(const Block::RR &Arr, const Vector::RC &Arc, const Matrix::CC &Acc,
-                      const Block::R &br, const Vector::C &bc, const float w = 1.0f) {
-      Set(Arr, Arc, Acc, br, bc, w);
+    inline EigenPrior(const Element::RR &Arr, const Vector::RC &Arc, const Matrix::CC &Acc,
+                      const Element::R &br, const Vector::C &bc, const float w = 1.0f,
+                      const bool pad = false) {
+      Set(Arr, Arc, Acc, br, bc, w, pad);
     }
-    inline void Set(const Block::RR &Arr, const Vector::RC &Arc, const Matrix::CC &Acc,
-                    const Block::R &br, const Vector::C &bc, const float w = 1.0f) {
+    inline void Set(const Pose &Z, const bool pad = false) {
+      Set(Z.m_Arr, Z.m_Arc, Z.m_Acc, Z.m_br, Z.m_bc, 1.0f, pad);
+    }
+    inline void Set(const Element::RR &Arr, const Vector::RC &Arc, const Matrix::CC &Acc,
+                    const Element::R &br, const Vector::C &bc, const float w = 1.0f,
+                    const bool pad = false) {
       const int N = bc.Size();
 #ifdef CFG_DEBUG
       UT_ASSERT(Acc.GetRows() == N && Acc.GetColumns() == N);
@@ -1877,8 +2006,7 @@ class Pose {
         UT_ASSERT(Arc.Size() == N);
       }
 #endif
-      const int Nx6 = N == 0 ? 6 : N * 6;
-      //const int Nx6 = N * 6;
+      const int Nx6 = N == 0 && pad ? 6 : N * 6;
       m_A.Resize(2 + Nx6, 2 + Nx6);
       m_A.MakeZero();
       m_b.Resize(2 + Nx6);
@@ -1903,8 +2031,8 @@ class Pose {
         m_b *= w;
       }
     }
-    inline void Get(Block::RR &Arr, Vector::RC &Arc, Matrix::CC &Acc,
-                    Block::R &br, Vector::C &bc) const {
+    inline void Get(Element::RR &Arr, Vector::RC &Arc, Matrix::CC &Acc,
+                    Element::R &br, Vector::C &bc) const {
       const int Nrc = m_b.Size(), Nx6 = Nrc - 2, N = Nx6 / 6;
 #ifdef CFG_DEBUG
       UT_ASSERT(Nx6 % 6 == 0);
@@ -1916,12 +2044,28 @@ class Pose {
       br = EigenVector2f(m_b.block<2, 1>(0, 0)).GetVector2f();
       EigenConvert(EigenVectorXf(m_b.block(2, 0, Nx6, 1)), bc);
     }
+    inline void Marginalize(const int ipc) {
+      EigenMatrixX<Element::T> e_Ab;
+      e_Ab.Set(EigenMatrixX<Element::T>(m_A.cast<Element::T>()),
+               EigenVectorX<Element::T>(m_b.cast<Element::T>()));
+#ifdef CFG_CAMERA_PRIOR_REORDER
+      e_Ab.Marginalize(ipc + 3, 1);
+      e_Ab.Marginalize(ipc + 3, 1);
+      e_Ab.Marginalize(ipc + 3, 1);
+      e_Ab.Marginalize(ipc, 1);
+      e_Ab.Marginalize(ipc, 1);
+      e_Ab.Marginalize(ipc, 1);
+#else
+      e_Ab.Marginalize(ipc, 6);
+#endif
+      EigenMatrixXf(e_Ab.cast<float>()).Get(m_A, m_b);
+    }
     inline bool AssertEqual(const Pose &Z, const int verbose = 1,
                             const std::string str = "") const {
       return AssertEqual(Z.m_Arr, Z.m_Arc, Z.m_Acc, Z.m_br, Z.m_bc, verbose, str);
     }
-    inline bool AssertEqual(const Block::RR &Arr, const Vector::RC &Arc, const Matrix::CC &Acc,
-                            const Block::R &br, const Vector::C &bc, const int verbose = 1,
+    inline bool AssertEqual(const Element::RR &Arr, const Vector::RC &Arc, const Matrix::CC &Acc,
+                            const Element::R &br, const Vector::C &bc, const int verbose = 1,
                             const std::string str = "") const {
       const int Nx6 = m_A.GetRows() - 2, N = bc.Size();
 #ifdef CFG_DEBUG
@@ -1958,11 +2102,16 @@ class Pose {
     EigenVectorXf m_b;
   };
  public:
-  EigenErrorJacobian EigenGetErrorJacobian(const AlignedVector<Rigid3D> &Cs) const;
-  EigenFactor EigenGetFactor(const float w, const AlignedVector<Rigid3D> &Cs) const;
+  EigenErrorJacobian EigenGetErrorJacobian(const AlignedVector<Rigid3D> &Cs,
+                                           const float eps) const;
+  EigenFactor EigenGetFactor(const float w, const AlignedVector<Rigid3D> &Cs,
+                             const float eps) const;
   float EigenGetCost(const float w, const AlignedVector<Rigid3D> &Cs,
-                     const std::vector<EigenVector6f> &e_xs) const;
-  void EigenGetResidual(const AlignedVector<Rigid3D> &Cs, EigenVectorXf *e_r) const;
+                     const std::vector<EigenVector6f> &e_xs, const float eps) const;
+  void EigenGetResidual(const AlignedVector<Rigid3D> &Cs, EigenVectorXf *e_r,
+                        const float eps) const;
+  void EigenGetPriorMeasurement(const float w, EigenMatrixXf *e_S,
+                                EigenVectorXf *e_x = NULL) const;
 #endif
 };
 
@@ -1970,18 +2119,11 @@ class Motion {
 
  public:
 
-  class Error {
+  class Error : public Element::EM {
    public:
-    inline void Set(const Block::M &e) { e.Get(m_ev, m_eba, m_ebw); }
-    inline void Get(Block::M *e) const { e->Set(m_ev, m_eba, m_ebw); }
+    inline void Set(const Element::M &e) { e.Get(m_ev, m_eba, m_ebw); }
+    inline void Get(Element::M *e) const { e->Set(m_ev, m_eba, m_ebw); }
     inline void MakeZero() { memset(this, 0, sizeof(Error)); }
-    inline void operator += (const Error &e) {
-      m_ev += e.m_ev;
-      m_eba += e.m_eba;
-      m_ebw += e.m_ebw;
-    }
-   public:
-    LA::AlignedVector3f m_ev, m_eba, m_ebw;
   };
   class Jacobian {
    public:
@@ -2023,7 +2165,7 @@ class Motion {
     class Auxiliary {
      public:
 #ifdef CFG_CAMERA_PRIOR_SQUARE_FORM
-      inline void Set(const ErrorJacobian &Je, const xp128f &w, const Block::MM &A) {
+      inline void Set(const ErrorJacobian &Je, const xp128f &w, const Element::MM &A) {
         Je.m_J.GetTranspose(&m_JT);
         Je.m_e.Get(&m_e);
         
@@ -2063,7 +2205,7 @@ class Motion {
         LA::AlignedMatrix9x9f::Ab(m_wA, m_e, _bm, 3);
       }
 #else
-      inline void Set(const ErrorJacobian &Je, const xp128f &w, const Block::MM &A) {
+      inline void Set(const ErrorJacobian &Je, const xp128f &w, const Element::MM &A) {
         Je.m_J.GetTranspose(&m_JT);
         
         A.GetScaled(w, m_wA);
@@ -2094,7 +2236,7 @@ class Motion {
         m_wA.GetBlock(6, 6, _A);
         LA::AlignedMatrix3x3f::AddAbTo(_A, Je.m_e.m_ebw, Aebw);
       }
-      inline void Get(const xp128f &w, const Block::M &b, LA::SymmetricMatrix3x3f *Arr,
+      inline void Get(const xp128f &w, const Element::M &b, LA::SymmetricMatrix3x3f *Arr,
                       LA::AlignedMatrix3x9f *Arm, LA::SymmetricMatrix9x9f *Amm, LA::Vector3f *br,
                       LA::Vector9f *bm) const {
         LA::SymmetricMatrix3x3f::ABT(m_JTArv, m_JT.m_Jvr, *Arr);
@@ -2107,7 +2249,7 @@ class Motion {
         Amm->Set06(m_JTAvbw);
         Amm->Set33(m_wA[3] + 3, m_wA[4] + 3, m_wA[5] + 3, m_wA[6] + 3, m_wA[7] + 3, m_wA[8] + 3);
 
-        Block::M Aepb;
+        Element::M Aepb;
         b.GetScaled(w, Aepb);
         Aepb += m_Ae;
         const LA::AlignedVector3f Aepbv(&Aepb.v0());
@@ -2118,13 +2260,13 @@ class Motion {
 #endif
      public:
       Jacobian m_JT;
-      Block::MM m_wA;
+      Element::MM m_wA;
       LA::AlignedMatrix3x3f m_JTArv, m_JTArba, m_JTArbw;
       LA::AlignedMatrix3x3f m_JTAvv, m_JTAvba, m_JTAvbw;
 #ifdef CFG_CAMERA_PRIOR_SQUARE_FORM
-      Block::M m_e;
+      Element::M m_e;
 #else
-      Block::M m_Ae;
+      Element::M m_Ae;
 #endif
     };
    public:
@@ -2208,6 +2350,8 @@ class Motion {
     m_bm.MakeZero();
 #ifdef CFG_CAMERA_PRIOR_SQUARE_FORM
     m_em.MakeZero();
+#else
+    m_xTb = 0.0f;
 #endif
   }
   inline void Initialize(const Motion &Zp) { *((Motion *) this) = Zp; }
@@ -2218,6 +2362,8 @@ class Motion {
     m_bm.MakeZero();
 #ifdef CFG_CAMERA_PRIOR_SQUARE_FORM
     m_em.MakeZero();
+#else
+    m_xTb = 0.0f;
 #endif
   }
 #endif
@@ -2280,7 +2426,7 @@ class Motion {
   inline LA::AlignedVector3f GetBiasGyroscopeError(const Camera &C, const float *x = NULL) const {
     return GetBiasGyroscopeState(C) - GetBiasGyroscopeMeasurement(x);
   }
-  inline void GetError(const Camera &C, Error *e) const {
+  inline void GetError(const Camera &C, Element::EM *e) const {
     const LA::AlignedVector3f v = C.m_T.GetAppliedRotation(C.m_v);
     LA::AlignedVector3f::amb(v, m_v, e->m_ev);
     LA::AlignedVector3f::amb(C.m_ba, m_ba, e->m_eba);
@@ -2328,14 +2474,14 @@ class Motion {
   }
 #ifdef CFG_CAMERA_PRIOR_SQUARE_FORM
   inline float GetCost(const float w, const Error &e) const {
-    Block::M _e, v;
+    Element::M _e, v;
     _e.Set(e.m_ev, e.m_eba, e.m_ebw);
     LA::AlignedMatrix9x9f::Ab(m_Amm, _e, (float *) &v);
     return w * _e.Dot(v);
   }
 #else
-  inline float GetCost(const float w, const Error &e, const Block::M &Ae) const {
-    Block::M _e, b;
+  inline float GetCost(const float w, const Error &e, const Element::M &Ae) const {
+    Element::M _e, b;
     e.Get(&_e);
     m_bm.GetScaled(w + w, b);
     b += Ae;
@@ -2343,7 +2489,7 @@ class Motion {
     return _e.Dot(b);
   }
   inline float GetCost(const float w, const Error &e) const {
-    Block::M _e, v;
+    Element::M _e, v;
     e.Get(&_e);
     LA::AlignedMatrix9x9f::Ab(m_Amm, _e, (float *) &v);
     //v *= 0.5f;
@@ -2367,7 +2513,7 @@ class Motion {
     Ra->m_dF = A.m_F - (Ra->m_F = GetCost(w, Ra->m_e));
     Rp->m_dF = A.m_F - (Rp->m_F = GetCost(w, Rp->m_e));
   }
-  inline void GetResidual(const Camera &C, Error *e, Block::M *em, Block::M *r) const {
+  inline void GetResidual(const Camera &C, Error *e, Element::M *em, Element::M *r) const {
     GetError(C, e);
     em->Set(e->m_ev, e->m_eba, e->m_ebw);
     LA::AlignedMatrix9x9f::Ab(m_Amm, *em, (float *) r);
@@ -2393,7 +2539,9 @@ class Motion {
     UT::SaveB(m_Amm, fp);
     UT::SaveB(m_bm, fp);
 #ifdef CFG_CAMERA_PRIOR_SQUARE_FORM
-    //UT::SaveB(m_em, fp);
+    UT::SaveB(m_em, fp);
+#else
+    UT::SaveB(m_xTb, fp);
 #endif
   }
   inline void LoadB(FILE *fp) {
@@ -2403,17 +2551,24 @@ class Motion {
     UT::LoadB(m_Amm, fp);
     UT::LoadB(m_bm, fp);
 #ifdef CFG_CAMERA_PRIOR_SQUARE_FORM
-    //UT::LoadB(m_em, fp);
+    UT::LoadB(m_em, fp);
+#else
+    UT::LoadB(m_xTb, fp);
 #endif
   }
+
+  bool GetPriorMeasurement(const float w, LA::AlignedMatrixXf *S, LA::AlignedVectorXf *x,
+                           float *xTb, AlignedVector<float> *work, const float *eps = NULL) const;
 
  public:
 
   LA::AlignedVector3f m_v, m_ba, m_bw;
-  Block::MM m_Amm;
-  Block::M m_bm;
+  Element::MM m_Amm;
+  Element::M m_bm;
 #ifdef CFG_CAMERA_PRIOR_SQUARE_FORM
   Error m_em;
+#else
+  float m_xTb;
 #endif
 
 #ifdef CFG_DEBUG_EIGEN
@@ -2508,6 +2663,10 @@ class Motion {
       m_A(3, 3) = m_A(4, 4) = m_A(5, 5) = UT::Inverse(s2ba, w);
       m_A(6, 6) = m_A(7, 7) = m_A(8, 8) = UT::Inverse(s2bw, w);
     }
+    inline void Set(const Motion &Z) {
+      m_A = EigenMatrix9x9f(Z.m_Amm);
+      m_b = EigenVector9f(Z.m_bm);
+    }
     inline bool AssertEqual(const Motion &Z, const int verbose = 1,
                             const std::string str = "") const {
       UT_ASSERT(m_A.GetRows() == 9 && m_A.GetColumns() == 9 && m_b.Size() == 9);
@@ -2517,7 +2676,7 @@ class Motion {
       const EigenVector9f e_bm(m_b.block<9, 1>(0, 0));
       scc = e_bm.AssertEqual(Z.m_bm, verbose, str + ".bm") && scc;
       //const EigenVector9f e_em = EigenVector9f(e_Amm.inverse() * e_bm);
-      //Block::M em;
+      //Element::M em;
       //Z.m_em.Get(&em);
       //scc = e_em.AssertEqual(em, verbose, str + "em") && scc;
       return scc;
@@ -2529,6 +2688,8 @@ class Motion {
   float EigenGetCost(const float w, const Camera &C, const EigenVector3f &e_xr,
                      const EigenVector9f &e_xm) const;
   void EigenGetResidual(const Camera &C, EigenVector9f *e_r) const;
+  void EigenGetPriorMeasurement(const float w, EigenMatrixXf *e_S,
+                                EigenVectorXf *e_x = NULL) const;
 #endif
 };
 
@@ -2564,8 +2725,9 @@ class Joint : public Pose, public Motion {
     m_Acm.Resize(0);
   }
   inline void Initialize(const float w, const int iKFr, const Rigid3D &Tr, const float s2r,
-                         const Motion &Zp, const bool newKF, const Rigid3D *T0 = NULL) {
-    Pose::Initialize(w, iKFr, Tr, s2r, newKF, T0);
+                         const Motion &Zp, const bool newKF, const Rigid3D *T0 = NULL,
+                         const float s2cp = 0.0f, const float s2cr = 0.0f) {
+    Pose::Initialize(w, iKFr, Tr, s2r, newKF, T0, s2cp, s2cr);
     Motion::Initialize(Zp);
     m_Arm.MakeZero();
     if (newKF) {
@@ -2579,6 +2741,10 @@ class Joint : public Pose, public Motion {
                      const float s2r, AlignedVector<float> *work) {
     Pose::Insert(w, i, iKF, T, s2p, s2r, work);
     m_Acm.InsertZero(i);
+  }
+  inline void Erase(const int i) {
+    Pose::Erase(i);
+    m_Acm.Erase(i);
   }
   inline void DeleteKeyFrame(const int iKF, const std::vector<int>::iterator *i = NULL) {
     const std::vector<int>::iterator _i = i ? *i : std::lower_bound(m_iKFs.begin(),
@@ -2604,13 +2770,63 @@ class Joint : public Pose, public Motion {
     m_bc[i1] += A11.m_b;
     m_bc[i2] += A22.m_b;
   }
+  inline void GetError(const Rigid3D &Tr, const Camera &C, LA::Vector2f *er/* = NULL*/,
+                       Element::EC *ec/* = NULL*/, Element::EM *em/* = NULL*/,
+                       const float eps) const {
+    const int N = static_cast<int>(m_iKFs.size());
+    if (er) {
+      if (m_Zps.Size() == N) {
+        er->Invalidate();
+      } else {
+#ifdef CFG_DEBUG
+        UT_ASSERT(m_Zps.Size() == N + 1);
+#endif
+        Rotation3D eR;
+        Rotation3D::AB(m_Zps.Back(), Tr, eR);
+        eR.GetRodriguesXY(*er, eps);
+      }
+    }
+    if (ec) {
+      const int ik = N - 1;
+#ifdef CFG_DEBUG
+      UT_ASSERT(m_iKFs[ik] == INT_MAX);
+#endif
+      Pose::GetError(Tr, C.m_T, ik, ec, eps);
+    }
+    if (em) {
+      Motion::GetError(C, em);
+    }
+  }
+  inline void GetError(const AlignedVector<Rigid3D> &Cs, const Camera &C, Error *e,
+                       const float eps) const {
+    Pose::GetError(Cs, &e->m_ec, eps);
+    Motion::GetError(C, &e->m_em);
+  }
+  inline float GetCost(const float w, const Error &e) const {
+    const float Fcc = Pose::GetCost(w, e.m_ec);
+    float Fmm = Motion::GetCost(w, e.m_em);
+    Element::R er;
+    Element::C ec1, ec2;
+    Element::M em;
+    e.m_em.Get(&em);
+    Element::RM::Ab(m_Arm, em, er);
+    float Fcm = er.Dot(e.m_ec.m_er);
+    const int N = e.m_ec.Size();
+    for (int i = 0; i < N; ++i) {
+      Element::CM::Ab(m_Acm[i], em, (float *) &ec1);
+      e.m_ec.m_ec[i].Get(&ec2);
+      Fcm += ec1.Dot(ec2);
+    }
+    Fcm *= w + w;
+    return Fcc + Fmm + Fcm;
+  }
   inline void GetResidual(const AlignedVector<Rigid3D> &Cs, const Camera &C, Error *e,
-                          Vector::C *ec, Block::M *em, Block::R *rr, Vector::C *rc,
-                          Block::M *rm) const {
-    Pose::GetResidual(Cs, &e->m_ec, ec, rr, rc);
+                          Vector::C *ec, Element::M *em, Element::R *rr, Vector::C *rc,
+                          Element::M *rm, const float eps) const {
+    Pose::GetResidual(Cs, &e->m_ec, ec, rr, rc, eps);
     Motion::GetResidual(C, &e->m_em, em, rm);
     const int N = static_cast<int>(m_iKFs.size());
-    if (m_Zps.Size() > N) {
+    if (m_Zps.Size() != N) {
       LA::AlignedMatrix2x9f::AddAbTo(m_Arm, *em, *rr);
       LA::AlignedMatrix2x9f::AddATbTo(m_Arm, e->m_ec.m_er, *rm);
     }
@@ -2658,47 +2874,59 @@ class Joint : public Pose, public Motion {
     }
     UT_ASSERT(m_Acm.Size() == static_cast<int>(m_iKFs.size()));
   }
-  
-  bool GetPriorMeasurement(const float w, LA::AlignedVectorXf *x, LA::AlignedMatrixXf *S) const;
-  bool GetPriorMeasurement(const float w, LA::AlignedVectorXf *x, LA::AlignedMatrixXf *S,
-                           AlignedVector<float> *work) const;
-  void PropagateLF(const Rigid3D &Tr, const Camera &C,
+
+  void SetPriorEquation(const Matrix::X &A, const Vector::X &b);
+  void GetPriorEquation(Matrix::X *A, Vector::X *b = NULL, const bool symmetric = true) const;
+  bool GetPriorMeasurement(const Element::T w, Matrix::X *S, Vector::X *x/* = NULL*/,
+                           Element::T *xTb/* = NULL*/, const Element::T *eps/* = NULL*/) const;
+  bool GetPriorMeasurement(const float w, LA::AlignedMatrixXf *S, LA::AlignedVectorXf *x,
+                           float *xTb, AlignedVector<float> *work, const float *eps = NULL) const;
+  bool Invertible(AlignedVector<float> *work, const float *eps = NULL) const;
+  bool PropagateLF(const Rigid3D &Tr, const Camera &C,
                    const IMU::Delta::Factor::Auxiliary::RelativeLF &A,
                    AlignedVector<float> *work, const float *eps = NULL);
-  void PropagateKF(const Rigid3D &Tr, const Camera &C,
+  bool PropagateLF(const IMU::Delta::Factor::Auxiliary::RelativeLF &A, LA::AlignedVectorXf *x,
+                   AlignedVector<float> *work, const float *eps = NULL) const;
+  bool PropagateKF(const Rigid3D &Tr, const Camera &C,
                    const IMU::Delta::Factor::Auxiliary::RelativeKF &A,
                    AlignedVector<float> *work, const float *eps = NULL);
+  bool PropagateKF(const IMU::Delta::Factor::Auxiliary::RelativeKF &A, LA::AlignedVectorXf *x,
+                   AlignedVector<float> *work, const float *eps = NULL) const;
   bool GetPriorPose(const int iKF, Pose *Zp, AlignedVector<float> *work, const float *eps = NULL) const;
   bool GetPriorMotion(Motion *Zp, AlignedVector<float> *work, const float *eps = NULL) const;
 
  public:
 
-  Block::RM m_Arm;
+  Element::RM m_Arm;
   Vector::CM m_Acm;
 
 #ifdef CFG_DEBUG_EIGEN
  public:
   class EigenPrior : public Pose::EigenPrior {
    public:
-    inline void Initialize(const float w, const float s2r, const Motion::EigenPrior &e_Ap) {
+    inline void Initialize(const float w, const float s2r, const Motion::EigenPrior &e_Ap,
+                           const float s2cp = 0.0f, const float s2cr = 0.0f) {
       m_A.Resize(17, 17);
       m_A.MakeZero();
       m_b.Resize(17);
       m_b.MakeZero();
       m_A(0, 0) = m_A(1, 1) = UT::Inverse(s2r, w);
+      m_A(2, 2) = m_A(3, 3) = m_A(4, 4) = UT::Inverse(s2cp, w);
+      m_A(5, 5) = m_A(6, 6) = m_A(7, 7) = UT::Inverse(s2cr, w);
 #ifdef CFG_DEBUG
       UT_ASSERT(e_Ap.m_A.GetRows() == 9 && e_Ap.m_A.GetColumns() == 9 && e_Ap.m_b.Size() == 9);
 #endif
       m_A.block(8, 8, 9, 9) = e_Ap.m_A;
       m_b.block(8, 0, 9, 1) = e_Ap.m_b;
     }
-    inline void Set(const Joint &Z) {
-      Set(Z.m_Arr, Z.m_Arc, Z.m_Arm, Z.m_Acc, Z.m_Acm, Z.m_Amm, Z.m_br, Z.m_bc, Z.m_bm);
+    inline void Set(const Joint &Z, const bool pad = false) {
+      Set(Z.m_Arr, Z.m_Arc, Z.m_Arm, Z.m_Acc, Z.m_Acm, Z.m_Amm, Z.m_br, Z.m_bc, Z.m_bm, pad);
     }
-    inline void Set(const Block::RR &Arr, const Vector::RC &Arc, const Block::RM &Arm,
-                    const Matrix::CC &Acc, const Vector::CM &Acm, const Block::MM &Amm,
-                    const Block::R &br, const Vector::C &bc, const Block::M &bm) {
-      const Pose::EigenPrior e_Arc = Pose::EigenPrior(Arr, Arc, Acc, br, bc);
+    inline void Set(const Element::RR &Arr, const Vector::RC &Arc, const Element::RM &Arm,
+                    const Matrix::CC &Acc, const Vector::CM &Acm, const Element::MM &Amm,
+                    const Element::R &br, const Vector::C &bc, const Element::M &bm,
+                    const bool pad = false) {
+      const Pose::EigenPrior e_Arc = Pose::EigenPrior(Arr, Arc, Acc, br, bc, 1.0f, pad);
       const int Nx6 = bc.Size() * 6, Nrc = e_Arc.m_b.Size(), Nrcm = Nrc + 9;
       m_A.Resize(Nrcm, Nrcm);
       m_A.MakeZero();
@@ -2721,9 +2949,9 @@ class Joint : public Pose, public Motion {
     inline void Get(Joint &Z) const {
       Get(Z.m_Arr, Z.m_Arc, Z.m_Arm, Z.m_Acc, Z.m_Acm, Z.m_Amm, Z.m_br, Z.m_bc, Z.m_bm);
     }
-    inline void Get(Block::RR &Arr, Vector::RC &Arc, Block::RM &Arm,
-                    Matrix::CC &Acc, Vector::CM &Acm, Block::MM &Amm,
-                    Block::R &br, Vector::C &bc, Block::M &bm) const {
+    inline void Get(Element::RR &Arr, Vector::RC &Arc, Element::RM &Arm,
+                    Matrix::CC &Acc, Vector::CM &Acm, Element::MM &Amm,
+                    Element::R &br, Vector::C &bc, Element::M &bm) const {
       const int Nrcm = m_b.Size(), Nrc = Nrcm - 9, Nx6 = Nrc - 2, N = Nx6 / 6;
 #ifdef CFG_DEBUG
       UT_ASSERT(Nx6 % 6 == 0);
@@ -2765,9 +2993,9 @@ class Joint : public Pose, public Motion {
       return AssertEqual(Z.m_Arr, Z.m_Arc, Z.m_Arm, Z.m_Acc, Z.m_Acm, Z.m_Amm,
                          Z.m_br, Z.m_bc, Z.m_bm, verbose, str);
     }
-    inline bool AssertEqual(const Block::RR &Arr, const Vector::RC &Arc, const Block::RM &Arm,
-                            const Matrix::CC &Acc, const Vector::CM &Acm, const Block::MM &Amm,
-                            const Block::R &br, const Vector::C &bc, const Block::M &bm,
+    inline bool AssertEqual(const Element::RR &Arr, const Vector::RC &Arc, const Element::RM &Arm,
+                            const Matrix::CC &Acc, const Vector::CM &Acm, const Element::MM &Amm,
+                            const Element::R &br, const Vector::C &bc, const Element::M &bm,
                             const int verbose = 1, const std::string str = "") const {
       const int Nrcm = m_b.Size(), Nrc = Nrcm - 9, Nx6 = Nrc - 2;
       bool scc = true;
@@ -2789,13 +3017,15 @@ class Joint : public Pose, public Motion {
       return scc;
     }
     
-    void PropagateLF(const IMU::Delta::EigenFactor::RelativeLF &e_A);
-    void PropagateKF(const IMU::Delta::EigenFactor::RelativeKF &e_A);
+    void PropagateLF(const IMU::Delta::EigenFactor::RelativeLF &e_A, EigenVectorXf *e_x = NULL);
+    void PropagateKF(const IMU::Delta::EigenFactor::RelativeKF &e_A, EigenVectorXf *e_x = NULL);
     void GetPriorPose(const int iKF, Pose::EigenPrior *e_Ap) const;
     void GetPriorMotion(Motion::EigenPrior *e_Ap) const;
   };
   void EigenGetResidual(const AlignedVector<Rigid3D> &Cs, const Camera &C,
-                        EigenVectorXf *e_r) const;
+                        EigenVectorXf *e_r, const float eps) const;
+  void EigenGetPriorMeasurement(const float w, EigenMatrixXf *e_S,
+                                EigenVectorXf *e_x = NULL) const;
 #endif
 
 };

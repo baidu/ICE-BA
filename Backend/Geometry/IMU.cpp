@@ -16,6 +16,8 @@
 #include "stdafx.h"
 //#ifndef CFG_DEBUG
 //#define CFG_DEBUG
+//#endif
+//#ifdef CFG_DEBUG
 //#define CFG_DEBUG_EIGEN
 //#endif
 #include "IMU.h"
@@ -734,9 +736,17 @@ void InitializeCamera(const AlignedVector<Measurement> &us, Camera &C) {
 
 void PreIntegrate(const AlignedVector<Measurement> &us, const float t1, const float t2,
                   const Camera &C1, Delta *D, AlignedVector<float> *work, const bool jac,
-                  const Measurement *u1, const Measurement *u2) {
+                  const Measurement *u1, const Measurement *u2, const float eps) {
 #ifdef CFG_DEBUG
   UT_ASSERT(us.Empty() || (us.Front().t() >= t1 && us.Back().t() <= t2));
+#endif
+  PreIntegrate(us.Data(), us.Size(), t1, t2, C1, D, work, jac, u1, u2, eps);
+}
+
+void PreIntegrate(const Measurement *us, const int N, const float t1, const float t2,
+                  const Camera &C1, Delta *D, AlignedVector<float> *work, const bool jac,
+                  const Measurement *u1, const Measurement *u2, const float eps) {
+#ifdef CFG_DEBUG
   if (u1) {
     UT_ASSERT(u1->Valid() && u1->t() <= t1);
   }
@@ -787,7 +797,6 @@ void PreIntegrate(const AlignedVector<Measurement> &us, const float t1, const fl
   LA::AlignedVector3f a, adt, w, wdt;
   LA::AlignedMatrix3x3f Jr[2], Jrdt;
   const xp128f s = xp128f::get(0.5f);
-  const int N = us.Size();
   for (int i1 = -1, i2 = 0; i1 < N; i1 = i2++) {
     if (i1 != -1) {
       const Measurement &_u1 = us[i1];
@@ -833,7 +842,7 @@ void PreIntegrate(const AlignedVector<Measurement> &us, const float t1, const fl
     w.GetScaled(dt, wdt);
     //dR.SetRodrigues(wdt);
     //Rotation3D::ABT(dR, RT[r1], D->m_R);
-    dq.SetRodrigues(wdt);
+    dq.SetRodrigues(wdt, eps);
     dR.SetQuaternion(dq);
     q = dq * q;
     RT[r2].SetQuaternion(q);
@@ -844,13 +853,18 @@ void PreIntegrate(const AlignedVector<Measurement> &us, const float t1, const fl
     const LA::AlignedVector3f dp = D->m_v * dt + dv * dt_2;
     D->m_v += dv;
     D->m_p += dp;
-    //if (UT::Debugging()) {
-    //  UT::Print("%d %d ", i1, i2);
-    //  (D->m_v * (1.0f / (_t2 - t1))).Print();
-    //}
+//#ifdef CFG_DEBUG
+#if 0
+    if (UT::Debugging()) {
+      UT::Print("%d %d\n", i1, i2);
+      //(D->m_v * (1.0f / (_t2 - t1))).Print();
+      D->m_v.Print();
+      D->m_p.Print();
+    }
+#endif
 
     if (jac) {
-      Rotation3D::GetRodriguesJacobian(wdt, Jrdt);
+      Rotation3D::GetRodriguesJacobian(wdt, Jrdt, eps);
       Jrdt *= dt;
       Jrbw[r2] = dR * Jrbw[r1] - Jrdt;
 #if 0
@@ -1009,14 +1023,14 @@ void PreIntegrate(const AlignedVector<Measurement> &us, const float t1, const fl
   }
 }
 
-void Propagate(const Point3D &pu, const Delta &D, const Camera &C1, Camera &C2) {
+void Propagate(const Point3D &pu, const Delta &D, const Camera &C1, Camera &C2, const float eps) {
   const LA::AlignedVector3f dba = C1.m_ba - D.m_ba;
   const LA::AlignedVector3f dbw = C1.m_bw - D.m_bw;
   const Rotation3D R1T = C1.m_T.GetRotationTranspose();
 #ifdef CFG_IMU_FULL_COVARIANCE
-  C2.m_T = D.GetRotationMeasurement(dbw).GetTranspose() / R1T;
+  C2.m_T = D.GetRotationMeasurement(dbw, eps).GetTranspose() / R1T;
 #else
-  C2.m_T = D.GetRotationMeasurement(dbw) / R1T;
+  C2.m_T = D.GetRotationMeasurement(dbw, eps) / R1T;
 #endif
   const LA::AlignedVector3f dp = D.m_p + D.m_Jpba * dba + D.m_Jpbw * dbw;
   C2.m_p = (R1T - C2.m_T.GetRotationTranspose()) * pu + C1.m_p +
@@ -1045,7 +1059,8 @@ void Propagate(const Point3D &pu, const Delta &D, const Camera &C1, Camera &C2) 
 #ifdef CFG_DEBUG_EIGEN
 //#define IMU_DELTA_EIGEN_DEBUG_JACOBIAN
 void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Point3D &pu,
-                                  EigenError *e_e, EigenJacobian::Global *e_J) const {
+                                  EigenError *e_e, EigenJacobian::Global *e_J,
+                                  const float eps) const {
   const EigenVector3f e_ba = EigenVector3f(m_ba), e_bw = EigenVector3f(m_bw);
   const EigenRotation3D e_RdT = EigenRotation3D(m_RT), e_Rd = EigenRotation3D(e_RdT.transpose());
   const EigenVector3f e_vd = EigenVector3f(m_v), e_pd = EigenVector3f(m_p);
@@ -1067,13 +1082,13 @@ void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Poin
   const EigenRotation3D e_R21 = EigenRotation3D(e_R12.transpose());
   const EigenVector3f e_drbw = EigenVector3f(-e_Jrbw * e_dbw);
 #ifdef CFG_IMU_FULL_COVARIANCE
-  //const EigenRotation3D e_eR = EigenRotation3D(e_RdT * EigenRotation3D(e_drbw) * e_R12);
-  const EigenRotation3D e_eR = GetRotationMeasurement(C1) / GetRotationState(C1, C2);
+  //const EigenRotation3D e_eR = EigenRotation3D(e_RdT * EigenRotation3D(e_drbw) * e_R12, eps);
+  const EigenRotation3D e_eR = GetRotationMeasurement(C1, eps) / GetRotationState(C1, C2);
 #else
   const EigenRotation3D e_eR = EigenRotation3D(e_R12 * e_RdT * EigenRotation3D(e_drbw));
 #endif
-  const EigenVector3f e_er = e_eR.GetRodrigues();
-  const EigenMatrix3x3f e_JrI = EigenRotation3D::GetRodriguesJacobianInverse(e_er);
+  const EigenVector3f e_er = e_eR.GetRodrigues(eps);
+  const EigenMatrix3x3f e_JrI = EigenRotation3D::GetRodriguesJacobianInverse(e_er, eps);
 #ifdef CFG_IMU_FULL_COVARIANCE
   const EigenMatrix3x3f e_Jrr2 = EigenMatrix3x3f(e_JrI * e_eR * e_R1);
 #else
@@ -1082,17 +1097,18 @@ void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Poin
   const EigenMatrix3x3f e_Jrr1 = EigenMatrix3x3f(-e_Jrr2);
 #ifdef CFG_IMU_FULL_COVARIANCE
   const EigenMatrix3x3f e_Jrbw1 = EigenMatrix3x3f(-e_JrI * e_RdT *
-                                                  EigenRotation3D::GetRodriguesJacobian(e_drbw) *
+                                                  EigenRotation3D::GetRodriguesJacobian(e_drbw, eps) *
                                                   e_Jrbw);
 #else
   const EigenMatrix3x3f e_Jrbw1 = EigenMatrix3x3f(-e_JrI * e_R12 * e_RdT *
-                                                  EigenRotation3D::GetRodriguesJacobian(e_drbw) *
+                                                  EigenRotation3D::GetRodriguesJacobian(e_drbw, eps) *
                                                   e_Jrbw);
 #endif
 
   EigenVector3f e_v12 = EigenVector3f(e_v2 - e_v1);
-  if (!IMU_GRAVITY_EXCLUDED)
+  if (!IMU_GRAVITY_EXCLUDED) {
     e_v12.z() += IMU_GRAVITY_MAGNITUDE * m_Tvg;
+  }
   const EigenMatrix3x3f e_Jvr1 = EigenMatrix3x3f(e_R1 * EigenSkewSymmetricMatrix(e_v12));
   e_v12 = EigenVector3f(e_R1 * e_v12);
   const EigenVector3f e_ev = EigenVector3f(e_v12 - (e_vd + e_Jvba * e_dba + e_Jvbw * e_dbw));
@@ -1102,8 +1118,9 @@ void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Poin
   const EigenMatrix3x3f e_Jvv2 = e_R1;
 
   EigenVector3f e_p12 = EigenVector3f(e_R2T * e_pu + e_p2 - e_p1 - e_v1 * m_Tpv);
-  if (!IMU_GRAVITY_EXCLUDED)
+  if (!IMU_GRAVITY_EXCLUDED) {
     e_p12.z() += IMU_GRAVITY_MAGNITUDE * m_Tpg;
+  }
   const EigenMatrix3x3f e_Jpr1 = EigenMatrix3x3f(e_R1 * EigenSkewSymmetricMatrix(e_p12));
   e_p12 = EigenVector3f(e_R1 * e_p12);
   const EigenVector3f e_ep = EigenVector3f(-e_pu + e_p12 - (e_pd + e_Jpba * e_dba +
@@ -1153,17 +1170,17 @@ void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Poin
     e_dr1.setZero();
     e_R1GT = e_R1;
     e_R2GT = e_Rd * e_R1GT;
-    e_dr2 = EigenRotation3D(e_R2GT * e_R2.transpose()).GetRodrigues();
+    e_dr2 = EigenRotation3D(e_R2GT * e_R2.transpose()).GetRodrigues(eps);
   } else if (e_dr2Max == 0.0f) {
     e_dr2.setZero();
     e_R2GT = e_R2;
     e_R1GT = e_RdT * e_R2GT;
-    e_dr1 = EigenRotation3D(e_R1GT * e_R1T).GetRodrigues();
+    e_dr1 = EigenRotation3D(e_R1GT * e_R1T).GetRodrigues(eps);
   } else {
-    e_dr1 = EigenAxisAngle::GetRandom(e_dr1Max * UT_FACTOR_DEG_TO_RAD).GetRodrigues();
+    e_dr1 = EigenAxisAngle::GetRandom(e_dr1Max * UT_FACTOR_DEG_TO_RAD).GetRodrigues(eps);
     e_R1GT = EigenMatrix3x3f(EigenRotation3D(e_dr1) * e_R1);
     e_R2GT = e_Rd * e_R1GT;
-    e_dr2 = EigenRotation3D(e_R2GT * e_R2.transpose()).GetRodrigues();
+    e_dr2 = EigenRotation3D(e_R2GT * e_R2.transpose()).GetRodrigues(eps);
   }
 #else
   const EigenVector3f e_dr1 = EigenVector3f::GetRandom(e_dr1Max * UT_FACTOR_DEG_TO_RAD);
@@ -1192,10 +1209,10 @@ void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Poin
   const EigenVector3f e_drbwGT = EigenVector3f(-e_Jrbw * e_dbwGT);
 #ifdef CFG_IMU_FULL_COVARIANCE
   const EigenVector3f e_erGT = EigenRotation3D(e_RdT * EigenRotation3D(e_drbwGT) *
-                                               e_R2GT * e_R1GT.GetTranspose()).GetRodrigues();
+                                               e_R2GT * e_R1GT.GetTranspose()).GetRodrigues(eps);
 #else
   const EigenVector3f e_erGT = EigenRotation3D(e_R2GT * e_R1GT.GetTranspose() * e_RdT *
-                                               EigenRotation3D(e_drbwGT)).GetRodrigues();
+                                               EigenRotation3D(e_drbwGT)).GetRodrigues(eps);
 #endif
 
   const EigenVector3f e_er1 = EigenVector3f(e_er - e_erGT);
@@ -1267,7 +1284,7 @@ void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Poin
 #ifdef CFG_DEBUG
   Error e;
   Jacobian::Global J;
-  GetErrorJacobian(C1, C2, pu, &e, &J);
+  GetErrorJacobian(C1, C2, pu, &e, &J, eps);
   e_e->AssertEqual(e);
   e_J->AssertEqual(J);
   e_e->Set(e);
@@ -1275,7 +1292,8 @@ void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Poin
 #endif
 }
 void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Point3D &pu,
-                                  const Rotation3D &Rg, EigenError *e_e, EigenJacobian::RelativeLF *e_J) const {
+                                  const Rotation3D &Rg, EigenError *e_e,
+                                  EigenJacobian::RelativeLF *e_J, const float eps) const {
   const EigenVector3f e_ba = EigenVector3f(m_ba), e_bw = EigenVector3f(m_bw);
   const EigenRotation3D e_RdT = EigenRotation3D(m_RT), e_Rd = EigenRotation3D(e_RdT.transpose());
   const EigenVector3f e_vd = EigenVector3f(m_v), e_pd = EigenVector3f(m_p);
@@ -1302,13 +1320,13 @@ void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Poin
   const EigenRotation3D e_R21 = EigenRotation3D(e_R12.transpose());
   const EigenVector3f e_drbw = EigenVector3f(-e_Jrbw * e_dbw);
 #ifdef CFG_IMU_FULL_COVARIANCE
-  //const EigenRotation3D e_eR = EigenRotation3D(e_RdT * EigenRotation3D(e_drbw) * e_R12);
-  const EigenRotation3D e_eR = GetRotationMeasurement(C1) / GetRotationState(C1, C2);
+  //const EigenRotation3D e_eR = EigenRotation3D(e_RdT * EigenRotation3D(e_drbw) * e_R12, eps);
+  const EigenRotation3D e_eR = GetRotationMeasurement(C1, eps) / GetRotationState(C1, C2);
 #else
-  const EigenRotation3D e_eR = EigenRotation3D(e_R12 * e_RdT * EigenRotation3D(e_drbw));
+  const EigenRotation3D e_eR = EigenRotation3D(e_R12 * e_RdT * EigenRotation3D(e_drbw), eps);
 #endif
-  const EigenVector3f e_er = e_eR.GetRodrigues();
-  const EigenMatrix3x3f e_JrI = EigenRotation3D::GetRodriguesJacobianInverse(e_er);
+  const EigenVector3f e_er = e_eR.GetRodrigues(eps);
+  const EigenMatrix3x3f e_JrI = EigenRotation3D::GetRodriguesJacobianInverse(e_er, eps);
 #ifdef CFG_IMU_FULL_COVARIANCE
   const EigenMatrix3x3f e_Jrr2 = EigenMatrix3x3f(e_JrI * (e_eR * e_R1));
 #else
@@ -1317,11 +1335,11 @@ void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Poin
   const EigenMatrix3x3f e_Jrr1 = EigenMatrix3x3f(-e_Jrr2);
 #ifdef CFG_IMU_FULL_COVARIANCE
   const EigenMatrix3x3f e_Jrbw1 = EigenMatrix3x3f(-e_JrI * e_RdT *
-                                                  EigenRotation3D::GetRodriguesJacobian(e_drbw) *
+                                                  EigenRotation3D::GetRodriguesJacobian(e_drbw, eps) *
                                                   e_Jrbw);
 #else
   const EigenMatrix3x3f e_Jrbw1 = EigenMatrix3x3f(-e_JrI * e_R12 * e_RdT *
-                                                  EigenRotation3D::GetRodriguesJacobian(e_drbw) *
+                                                  EigenRotation3D::GetRodriguesJacobian(e_drbw, eps) *
                                                   e_Jrbw);
 #endif
 
@@ -1415,17 +1433,17 @@ void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Poin
   const EigenVector3f e_drbwGT = EigenVector3f(-e_Jrbw * e_dbwGT);
 #ifdef CFG_IMU_FULL_COVARIANCE
   const EigenVector3f e_erGT = EigenRotation3D(e_RdT * EigenRotation3D(e_drbwGT) *
-                                               e_R2GT * e_R1GT.GetTranspose()).GetRodrigues();
+                                               e_R2GT * e_R1GT.GetTranspose()).GetRodrigues(eps);
 #else
   const EigenVector3f e_erGT = EigenRotation3D(e_R2GT * e_R1GT.GetTranspose() * e_RdT *
-                                               EigenRotation3D(e_drbwGT)).GetRodrigues();
+                                               EigenRotation3D(e_drbwGT)).GetRodrigues(eps);
 #endif
 
   const EigenVector3f e_er1 = EigenVector3f(e_er - e_erGT);
   const EigenVector3f e_er2 = EigenVector3f(e_er1 + e_Jrr1 * e_dr1 + e_Jrr2 * e_dr2 +
                                                     e_Jrbw1 * e_dbw1);
-  const float eps = 1.0e-3f;
-  UT::AssertReduction(e_er1, e_er2, 1, "er", eps);
+  const float _eps = 1.0e-3f;
+  UT::AssertReduction(e_er1, e_er2, 1, "er", _eps);
 
   e_v12 = EigenVector3f(e_R2GT.transpose() * e_v2GT - e_RgGT * e_g * m_Tvg);
   e_v12 = EigenVector3f(e_R1GT * e_v12 - e_v1GT);
@@ -1483,7 +1501,7 @@ void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Poin
 #ifdef CFG_DEBUG
   Error e;
   Jacobian::RelativeLF J;
-  GetErrorJacobian(C1, C2, pu, Rg, &e, &J);
+  GetErrorJacobian(C1, C2, pu, Rg, &e, &J, eps);
   e_e->AssertEqual(e);
   e_J->AssertEqual(J, m_Tpv);
   e_e->Set(e);
@@ -1492,9 +1510,10 @@ void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Poin
 }
 
 void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Point3D &pu,
-                                  EigenError *e_e, EigenJacobian::RelativeKF *e_J) const {
+                                  EigenError *e_e, EigenJacobian::RelativeKF *e_J,
+                                  const float eps) const {
   const Rotation3D Rg = C1.m_T;
-  EigenGetErrorJacobian(C1, C2, pu, Rg, e_e, e_J);
+  EigenGetErrorJacobian(C1, C2, pu, Rg, e_e, e_J, eps);
   e_J->m_Jr.block<3, 6>(0, 0).setZero();
   e_J->m_Jv.block<3, 6>(0, 0).setZero();
   e_J->m_Jp.block<3, 6>(0, 0).setZero();
@@ -1503,26 +1522,27 @@ void Delta::EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Poin
 }
 
 void Delta::EigenGetFactor(const float w, const Camera &C1, const Camera &C2, const Point3D &pu,
-                           EigenFactor::Global *e_A) const {
+                           EigenFactor::Global *e_A, const float eps) const {
   EigenError e_e;
   EigenJacobian::Global e_J;
-  EigenGetErrorJacobian(C1, C2, pu, &e_e, &e_J);
+  EigenGetErrorJacobian(C1, C2, pu, &e_e, &e_J, eps);
   EigenGetFactor(w, m_W, e_J, e_e, e_A);
 }
 
 void Delta::EigenGetFactor(const float w, const Camera &C1, const Camera &C2, const Point3D &pu,
-                           const Rotation3D &Rg, EigenFactor::RelativeLF *e_A) const {
+                           const Rotation3D &Rg, EigenFactor::RelativeLF *e_A,
+                           const float eps) const {
   EigenError e_e;
   EigenJacobian::RelativeLF e_J;
-  EigenGetErrorJacobian(C1, C2, pu, Rg, &e_e, &e_J);
+  EigenGetErrorJacobian(C1, C2, pu, Rg, &e_e, &e_J, eps);
   EigenGetFactor(w, m_W, e_J, e_e, e_A);
 }
 
 void Delta::EigenGetFactor(const float w, const Camera &C1, const Camera &C2, const Point3D &pu,
-                           EigenFactor::RelativeKF *e_A) const {
+                           EigenFactor::RelativeKF *e_A, const float eps) const {
   EigenError e_e;
   EigenJacobian::RelativeKF e_J;
-  EigenGetErrorJacobian(C1, C2, pu, &e_e, &e_J);
+  EigenGetErrorJacobian(C1, C2, pu, &e_e, &e_J, eps);
   EigenGetFactor(w, m_W, e_J, e_e, e_A);
 }
 
@@ -1604,9 +1624,10 @@ Delta::EigenError Delta::EigenGetError(const EigenErrorJacobian &e_Je, const Eig
 
 float Delta::EigenGetCost(const float w, const Camera &C1, const Camera &C2, const Point3D &pu,
                           const EigenVector6f &e_xc1, const EigenVector9f &e_xm1,
-                          const EigenVector6f &e_xc2, const EigenVector9f &e_xm2) const {
+                          const EigenVector6f &e_xc2, const EigenVector9f &e_xm2,
+                          const float eps) const {
   EigenErrorJacobian e_Je;
-  EigenGetErrorJacobian(C1, C2, pu, &e_Je.m_e, &e_Je.m_J);
+  EigenGetErrorJacobian(C1, C2, pu, &e_Je.m_e, &e_Je.m_J, eps);
   const EigenVector30f e_x(e_xc1, e_xm1, e_xc2, e_xm2);
   const EigenError e_e = EigenGetError(e_Je, e_x);
 #ifdef CFG_IMU_FULL_COVARIANCE

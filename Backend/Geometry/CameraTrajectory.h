@@ -190,7 +190,8 @@ class CameraTrajectory {
     if (ts) {
       const int Nt = static_cast<int>(ts->size());
       CameraTrajectory CTGT(m_flag);
-      if (dtMax == FLT_MAX) {
+      //if (dtMax == FLT_MAX) {
+      if (dtMax < 0.0f || dtMax == FLT_MAX) {
         CTGT.Resize(Nt);
         for (int i = 0; i < Nt; ++i) {
           const float t = ts->at(i);

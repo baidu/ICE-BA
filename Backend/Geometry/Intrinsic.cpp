@@ -43,12 +43,14 @@ void Intrinsic::UndistortionMap::Set(const Intrinsic &K) {
   for(int i = 0, ix = 0, id = 0; i < N; ++i) {
     xd.x() = fxI * (x[0] - m_cx);
     xd.y() = fyI * (x[1] - m_cy);
-    if (i == 0)
+    if (i == 0) {
       xn = xd;
-    else
+    } else {
       xn = xd * v;
-    if (!K.Undistort(xd, &xn, NULL, NULL, true))
+    }
+    if (!K.Undistort(xd, &xn, NULL, NULL, true)) {
       exit(0);
+    }
     v = sqrtf(xn.SquaredLength() / xd.SquaredLength());
 //#ifdef CFG_DEBUG
 #if 0
@@ -72,8 +74,9 @@ void Intrinsic::UndistortionMap::Set(const Intrinsic &K) {
     if (x[ix] == b[ix][id]) {
       b[ix][id] += d[id];
       ix = 1 - ix;
-      if (ix == 0)
+      if (ix == 0) {
         id = 1 - id;
+      }
     }
     x[ix] += d[id];
   }

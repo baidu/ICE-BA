@@ -56,9 +56,17 @@ class AlignedMatrix2x6f {
     memcpy(&m_data[0][0], &M0.m00(), 12);   memcpy(&m_data[0][3], &M1.m00(), 12);
     memcpy(&m_data[1][0], &M0.m10(), 12);   memcpy(&m_data[1][3], &M1.m10(), 12);
   }
+  inline void Set(const Matrix2x3f &M0, const Matrix2x3f &M1) {
+    memcpy(&m_data[0][0], M0[0], 12);   memcpy(&m_data[0][3], M1[0], 12);
+    memcpy(&m_data[1][0], M0[1], 12);   memcpy(&m_data[1][3], M1[1], 12);
+  }
   inline void Get(AlignedMatrix2x3f &M0, AlignedMatrix2x3f &M1) const {
     memcpy(&M0.m00(), &m_data[0][0], 12);   memcpy(&M1.m00(), &m_data[0][3], 12);
     memcpy(&M0.m10(), &m_data[1][0], 12);   memcpy(&M1.m10(), &m_data[1][3], 12);
+  }
+  inline void Get(Matrix2x3f &M0, Matrix2x3f &M1) const {
+    memcpy(M0[0], &m_data[0][0], 12);       memcpy(M1[0], &m_data[0][3], 12);
+    memcpy(M0[1], &m_data[1][0], 12);       memcpy(M1[1], &m_data[1][3], 12);
   }
   inline void GetScaled(const xp128f &w, AlignedMatrix2x6f &M) const {
     M.m_00_01_02_03() = w * m_00_01_02_03();

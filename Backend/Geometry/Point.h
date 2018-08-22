@@ -23,10 +23,8 @@ class Point2D : public LA::Vector2f {
  public:
   inline Point2D() : LA::Vector2f() {}
   inline Point2D(const float x, const float y) : LA::Vector2f(x, y) {}
-  inline Point2D(const LA::Vector2f &x) {
-    memcpy(this, &x, sizeof(float) * 2);
-  }
-
+  inline Point2D(const float *x) { memcpy(this, x, sizeof(Point2D)); }
+  inline Point2D(const LA::Vector2f &x) { memcpy(this, &x, sizeof(Point2D)); }
 };
 
 class Point2DCovariance : public LA::SymmetricMatrix2x2f {

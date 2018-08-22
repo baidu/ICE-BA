@@ -266,8 +266,9 @@ void Viewer::PrepareCircle() {
 }
 
 void Viewer::Draw(const bool swapBuffers) {
-  if (swapBuffers)
+  if (swapBuffers) {
     SwapBuffers();
+  }
 }
 
 void Viewer::SwapBuffers() {

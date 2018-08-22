@@ -208,13 +208,22 @@ set(SOURCES_UTILITY
 # e.g., <IBA.h> becomes <IBA/IBA.h>
 # Since IBA_INCLUDE_DIRS is relative, do NOT expose it outside of Solver
 # TODO(mingyu): Need to add a cached IBA_INCLUDE_DIRS that only exposes the necessary headers
-set(IBA_INCLUDE_DIRS
+set(IBA_INCLUDE_DIRS 
  IBA
  BundleAdjustment
  Geometry
  LinearAlgebra
  Map
  Utility
+)
+set(GLOBAL_IBA_INCLUDE_DIRS
+ ${PROJECT_SOURCE_DIR}/IBA
+ ${PROJECT_SOURCE_DIR}/BundleAdjustment
+ ${PROJECT_SOURCE_DIR}/Geometry
+ ${PROJECT_SOURCE_DIR}/LinearAlgebra
+ ${PROJECT_SOURCE_DIR}/Map
+ ${PROJECT_SOURCE_DIR}/Utility
+ CACHE INTERNAL "IBA include dirs"
 )
 set(HEADERS_IBA
  IBA/IBA.h
@@ -262,6 +271,10 @@ target_link_libraries(IBA
 if (CVD_FOUND)
 set(VISUALIZATION_INCLUDE_DIR
  Visualization
+)
+set(GLOBAL_VISUALIZATION_INCLUDE_DIR
+ ${PROJECT_SOURCE_DIR}/Visualization
+ CACHE INTERNAL "vis include dir"
 )
 set(HEADERS_VISUALIZATION
  Visualization/Arcball.h

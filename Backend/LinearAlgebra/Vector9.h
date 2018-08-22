@@ -86,15 +86,9 @@ class AlignedVector9f {
     memcpy(this, v, 36);
   }
   inline void Set(const double *v) {
-    v0() = float(v[0]);
-    v1() = float(v[1]);
-    v2() = float(v[2]);
-    v3() = float(v[3]);
-    v4() = float(v[4]);
-    v5() = float(v[5]);
-    v6() = float(v[6]);
-    v7() = float(v[7]);
-    v8() = float(v[8]);
+    for (int i = 0; i < 9; ++i) {
+      m_data[i] = static_cast<float>(v[i]);
+    }
   }
   inline void Set(const AlignedVector3f &v0, const AlignedVector3f &v1,
                   const AlignedVector3f &v2) {
@@ -102,12 +96,25 @@ class AlignedVector9f {
     Set345(v1);
     Set678(v2);
   }
-  inline void Set012(const AlignedVector3f &v) { memcpy(&v0(), &v.v0(), 12); }
-  inline void Set345(const AlignedVector3f &v) { memcpy(&v3(), &v.v0(), 12); }
-  inline void Set678(const AlignedVector3f &v) { memcpy(&v6(), &v.v0(), 12); }
+  inline void Set012(const float *v) { memcpy(&v0(), v, 12); }
+  inline void Set345(const float *v) { memcpy(&v3(), v, 12); }
+  inline void Set678(const float *v) { memcpy(&v6(), v, 12); }
   inline void Get(float *v) const {
     memcpy(v, this, 36);
   }
+  inline void Get(Vector3f &v0, Vector3f &v1, Vector3f &v2) const {
+    Get012(v0);
+    Get345(v1);
+    Get678(v2);
+  }
+  inline void Get(double *v) const {
+    for (int i = 0; i < 9; ++i) {
+      v[i] = static_cast<double>(m_data[i]);
+    }
+  }
+  inline void Get012(Vector3f &v) const { v.Set(&v0()); }
+  inline void Get345(Vector3f &v) const { v.Set(&v3()); }
+  inline void Get678(Vector3f &v) const { v.Set(&v6()); }
   inline void Get(AlignedVector3f &v0, AlignedVector3f &v1, AlignedVector3f &v2) const {
     Get012(v0);
     Get345(v1);
@@ -175,7 +182,9 @@ class AlignedVector9f {
 
   inline void Random(const float vMax) { UT::Random(&v0(), 9, -vMax, vMax); }
   static inline AlignedVector9f GetRandom(const float vMax) {
-    AlignedVector9f v; v.Random(vMax); return v;
+    AlignedVector9f v;
+    v.Random(vMax);
+    return v;
   }
 
   inline bool AssertEqual(const LA::AlignedVector9f &v,
@@ -228,6 +237,8 @@ template<typename TYPE> class Vector9 {
   //inline Vector9() {}
   //inline Vector9(const TYPE *v) { Set(v); }
 
+  static inline Vector9<TYPE> Get(const float *v) { Vector9<TYPE> _v; _v.Set(v); return _v; }
+
   inline const TYPE& v0() const { return m_data[0]; }   inline TYPE& v0() { return m_data[0]; }
   inline const TYPE& v1() const { return m_data[1]; }   inline TYPE& v1() { return m_data[1]; }
   inline const TYPE& v2() const { return m_data[2]; }   inline TYPE& v2() { return m_data[2]; }
@@ -240,7 +251,7 @@ template<typename TYPE> class Vector9 {
 
   inline operator const TYPE* () const { return m_data; }
   inline operator       TYPE* ()       { return m_data; }
-  inline void operator = (const TYPE *v) { Set(v); }
+  //inline void operator = (const TYPE *v) { Set(v); }
   inline Vector9<TYPE> operator * (const TYPE s) const { Vector9<TYPE> v; GetScaled(s, v); return v; }
   inline Vector9<TYPE> operator * (const xp128f &s) const { Vector9<TYPE> v; GetScaled(TYPE(s[0]), v); return v; }
 
@@ -273,15 +284,16 @@ template<typename TYPE> class Vector9 {
     v0() = v; v1() = v; v2() = v; v3() = v; v4() = v;
     v5() = v; v6() = v; v7() = v; v8() = v;
   }
-  inline void Set(const TYPE *v) { memcpy(this, v, sizeof(Vector9<TYPE>)); }
+  inline void Set(const float *v);
+  inline void Set(const double *v);
   inline void Set(const TYPE *v0, const TYPE *v1, const TYPE *v2) {
     Set012(v0);
     Set345(v1);
     Set678(v2);
   }
-  inline void Set012(const TYPE *v) { memcpy(&v0(), v, sizeof(TYPE) * 3); }
-  inline void Set345(const TYPE *v) { memcpy(&v3(), v, sizeof(TYPE) * 3); }
-  inline void Set678(const TYPE *v) { memcpy(&v6(), v, sizeof(TYPE) * 3); }
+  inline void Set012(const float *v);
+  inline void Set345(const float *v);
+  inline void Set678(const float *v);
   inline void Get(TYPE *v) const { memcpy(v, this, sizeof(Vector9<TYPE>)); }
   inline void Get(AlignedVector3f &v0, AlignedVector3f &v1, AlignedVector3f &v2) const {
     Get012(v0);
@@ -317,20 +329,20 @@ template<typename TYPE> class Vector9 {
   inline void MakeZero345() { memset(&v3(), 0, sizeof(TYPE) * 3); }
   inline void MakeZero678() { memset(&v6(), 0, sizeof(TYPE) * 3); }
 
+  inline void MakeMinus() {
+    for (int i = 0; i < 9; ++i) {
+      m_data[i] = -m_data[i];
+    }
+  }
+
   inline bool Valid() const { return v0() != UT::Invalid<TYPE>(); }
   inline bool Invalid() const { return v0() == UT::Invalid<TYPE>(); }
   inline void Invalidate() { v0() = UT::Invalid<TYPE>(); }
 
   inline void GetScaled(const TYPE s, Vector9<TYPE> &v) const {
-    v.v0() = s * v0();
-    v.v1() = s * v1();
-    v.v2() = s * v2();
-    v.v3() = s * v3();
-    v.v4() = s * v4();
-    v.v5() = s * v5();
-    v.v6() = s * v6();
-    v.v7() = s * v7();
-    v.v8() = s * v8();
+    for (int i = 0; i < 9; ++i) {
+      v[i] = s * m_data[i];
+    }
   }
 
   inline TYPE Sum() const {
@@ -379,7 +391,9 @@ template<typename TYPE> class Vector9 {
 
   inline void Random(const TYPE vMin, const TYPE vMax) { UT::Random(&v0(), 9, vMin, vMax); }
   static inline Vector9<TYPE> GetRandom(const TYPE vMin, const TYPE vMax) {
-    Vector9<TYPE> v; v.Random(vMin, vMax); return v;
+    Vector9<TYPE> v;
+    v.Random(vMin, vMax);
+    return v;
   }
 
   static inline void AbTo0(const AlignedMatrix3x3f &A, const AlignedVector3f &b, Vector9<TYPE> &Ab) {
@@ -424,23 +438,47 @@ template<typename TYPE> class Vector9 {
 typedef Vector9<float> Vector9f;
 typedef Vector9<double> Vector9d;
 
+template<> inline void Vector9f::Set(const float *v) { memcpy(this, v, sizeof(Vector9f)); }
+template<> inline void Vector9d::Set(const float *v) {
+  for (int i = 0; i < 9; ++i) {
+    m_data[i] = static_cast<double>(v[i]);
+  }
+}
+template<> inline void Vector9f::Set012(const float *v) { memcpy(&v0(), v, 12); }
+template<> inline void Vector9f::Set345(const float *v) { memcpy(&v3(), v, 12); }
+template<> inline void Vector9f::Set678(const float *v) { memcpy(&v6(), v, 12); }
+template<> inline void Vector9d::Set012(const float *v) {
+  v0() = static_cast<double>(v[0]);
+  v1() = static_cast<double>(v[1]);
+  v2() = static_cast<double>(v[2]);
+}
+template<> inline void Vector9d::Set345(const float *v) {
+  v3() = static_cast<double>(v[0]);
+  v4() = static_cast<double>(v[1]);
+  v5() = static_cast<double>(v[2]);
+}
+template<> inline void Vector9d::Set678(const float *v) {
+  v6() = static_cast<double>(v[0]);
+  v7() = static_cast<double>(v[1]);
+  v8() = static_cast<double>(v[2]);
+}
 template<> inline void Vector9f::Get012(float *v) const { memcpy(v, &v0(), 12); }
 template<> inline void Vector9f::Get345(float *v) const { memcpy(v, &v3(), 12); }
 template<> inline void Vector9f::Get678(float *v) const { memcpy(v, &v6(), 12); }
 template<> inline void Vector9d::Get012(float *v) const {
-  v[0] = float(v0());
-  v[1] = float(v1());
-  v[2] = float(v2());
+  v[0] = static_cast<float>(v0());
+  v[1] = static_cast<float>(v1());
+  v[2] = static_cast<float>(v2());
 }
 template<> inline void Vector9d::Get345(float *v) const {
-  v[0] = float(v3());
-  v[1] = float(v4());
-  v[2] = float(v5());
+  v[0] = static_cast<float>(v3());
+  v[1] = static_cast<float>(v4());
+  v[2] = static_cast<float>(v5());
 }
 template<> inline void Vector9d::Get678(float *v) const {
-  v[0] = float(v6());
-  v[1] = float(v7());
-  v[2] = float(v8());
+  v[0] = static_cast<float>(v6());
+  v[1] = static_cast<float>(v7());
+  v[2] = static_cast<float>(v8());
 }
 
 }  // namespace LA
@@ -502,6 +540,10 @@ class EigenVector9f : public Eigen::Matrix<float, 9, 1> {
                           const int verbose = 1, const std::string str = "",
                           const float epsAbs = 0.0f, const float epsRel = 0.0f) const {
     return AssertEqual(e_v.GetAlignedVector9f(), verbose, str, epsAbs, epsRel);
+  }
+  inline bool AssertZero(const int verbose = 1, const std::string str = "",
+                         const float epsAbs = 0.0f, const float epsRel = 0.0f) const {
+    return GetAlignedVector9f().AssertZero(verbose, str, epsAbs, epsRel);
   }
 };
 #endif

@@ -16,9 +16,9 @@
 #include "stdafx.h"
 #include "ViewerIBA.h"
 #include "IBA_internal.h"
-#ifndef CFG_DEBUG
-#define CFG_DEBUG
-#endif
+//#ifndef CFG_DEBUG
+//#define CFG_DEBUG
+//#endif
 
 void ViewerIBA::Create(IBA::Solver *solver, const std::string screenFile, const int screenCombine,
                        const std::string saveFile, const int iFrmSave, const bool wnd) {
@@ -69,17 +69,11 @@ void ViewerIBA::Create(IBA::Solver *solver, const std::string screenFile, const 
 #endif
                                                     ));
   m_keyDrawDepType.Set(DRAW_DEP_LBA, UT::Strings("DRAW_DEP_LBA", "DRAW_DEP_GBA"
-#ifdef CFG_DEPTH_MAP
-                                               , "DRAW_DEP_DEPTH_MAP"
-#endif
 #ifdef CFG_GROUND_TRUTH
                                                , "DRAW_DEP_GT"
 #endif
                                                ));
   m_keyDrawDepTypeCMP.Set(DRAW_DEP_LBA, UT::Strings("DRAW_DEP_CMP_LBA", "DRAW_DEP_CMP_GBA"
-#ifdef CFG_DEPTH_MAP
-                                                  , "DRAW_DEP_CMP_DEPTH_MAP"
-#endif
 #ifdef CFG_GROUND_TRUTH
                                                   , "DRAW_DEP_CMP_GT"
 #endif
@@ -99,7 +93,8 @@ void ViewerIBA::Create(IBA::Solver *solver, const std::string screenFile, const 
   m_keyDrawPrfScale[DRAW_PRF_IMU_DELTA_BIAS_GYROSCOPE_STATE].Set(1.0f, "DRAW_PRF_IMU_DELTA_BIAS_GYROSCOPE_STATE");
   m_keyDrawPrfScale[DRAW_PRF_CAMERA_PRIOR_ROTATION_STATE].Set(5.0f, "DRAW_PRF_CAMERA_PRIOR_ROTATION");
   m_keyDrawPrfScale[DRAW_PRF_CAMERA_PRIOR_POSITION_STATE].Set(0.05f, "DRAW_PRF_CAMERA_PRIOR_POSITION");
-  m_keyDrawPrfScale[DRAW_PRF_CAMERA_PRIOR_VELOCITY_STATE].Set(1.0f, "DRAW_PRF_CAMERA_PRIOR_VELOCITY_STATE");
+  m_keyDrawPrfScale[DRAW_PRF_CAMERA_PRIOR_VELOCITY_STATE].Set(0.1f, "DRAW_PRF_CAMERA_PRIOR_VELOCITY_STATE");
+  //m_keyDrawPrfScale[DRAW_PRF_CAMERA_PRIOR_VELOCITY_STATE].Set(1.0f, "DRAW_PRF_CAMERA_PRIOR_VELOCITY_STATE");
   m_keyDrawPrfScale[DRAW_PRF_CAMERA_PRIOR_BIAS_ACCELERATION_STATE].Set(1.0f, "DRAW_PRF_CAMERA_PRIOR_BIAS_ACCELERATION_STATE");
   m_keyDrawPrfScale[DRAW_PRF_CAMERA_PRIOR_BIAS_GYROSCOPE_STATE].Set(10.0f, "DRAW_PRF_CAMERA_PRIOR_BIAS_GYROSCOPE_STATE");
   m_keyDrawPrfScale[DRAW_PRF_REPROJECTION_ERROR].Set(10.0f, "DRAW_PRF_REPROJECTION_ERROR");
@@ -195,9 +190,6 @@ void ViewerIBA::Create(IBA::Solver *solver, const std::string screenFile, const 
   if (m_pWnd)
 #endif
   {
-#ifdef CFG_DEPTH_MAP
-    m_texZ.Generate(w, h, GL_LINEAR);
-#endif
     m_texRGB.Generate(w, h, GL_LINEAR);
 #ifdef CFG_STEREO
     m_texRGBr.Generate(w, h, GL_LINEAR);
@@ -210,23 +202,29 @@ void ViewerIBA::Create(IBA::Solver *solver, const std::string screenFile, const 
 void ViewerIBA::Reset() {
   //m_iLF = -1;
   m_iLF = m_LBA->m_ic2LF.empty() ? -1 : m_LBA->m_ic2LF.back();
+  m_iFrm = m_iLF == -1 ? -1 : GetLocalFrame(m_iLF)->m_T.m_iFrm;
   m_iKFActive = m_iLFActive = m_iLFActiveLast = m_iFrmActive = m_iFrmActiveLast = -1;
 #ifdef CFG_STEREO
   m_rightActive = m_rightActiveLast = false;
 #endif
   m_iFtrActive.Invalidate();
 
-  m_iFrmsKF = m_solver->m_internal->m_iFrmsKF;
-  m_iKF2d = m_solver->m_internal->m_iKF2d;
-  m_clrsKF.assign(m_solver->m_internal->m_ds.size(), LA::Vector3ub::Get(0, 255, 255));
+  //const std::vector<LocalMap::CameraKF> &CsKF = m_solver->m_internal->m_CsKF;
+  //const int nKFs = static_cast<int>(CsKF.size());
+  //m_iFrmsKF.resize(nKFs);
+  //for (int iKF = 0; iKF < nKFs; ++iKF) {
+  //  m_iFrmsKF[iKF] = CsKF[iKF].m_iFrm;
+  //}
+  //m_iKF2d = m_solver->m_internal->m_iKF2d;
+  //m_clrsKF.assign(m_solver->m_internal->m_ds.size(), LA::Vector3ub::Get(0, 255, 255));
+  m_iFrmsKF = m_LBA->m_iFrmsKF;
+  m_iKF2d = m_LBA->m_iKF2d;
+  m_clrsKF.assign(m_LBA->m_ds.size(), LA::Vector3ub::Get(0, 255, 255));
 
   m_dragingActiveFrm = false;
   m_dragingActiveFtr = false;
   SearchActiveFeatureReset();
 
-#ifdef CFG_DEPTH_MAP
-  m_iFrmTexZ = -1;
-#endif
   m_iFrmTexRGB = -1;
 #ifdef CFG_STEREO
   m_iFrmTexRGBr = -1;
@@ -239,28 +237,38 @@ void ViewerIBA::Reset() {
 
 //#ifdef CFG_DEBUG
 #if 1
-  m_keyDrawPrfType = DRAW_PRF_IMU_DELTA_ROTATION_STATE;
-#ifdef CFG_DEPTH_MAP
-  m_keyDrawDepTypeCMP = DRAW_DEP_DEPTH_MAP;
+  //m_keyDrawPrfType = DRAW_PRF_IMU_DELTA_ROTATION_STATE;
+  //m_keyDrawPrfType = DRAW_PRF_CAMERA_PRIOR_POSITION_ERROR;
+  m_keyDrawPrfType = DRAW_PRF_CAMERA_PRIOR_VELOCITY_ERROR;
+//#ifdef CFG_GROUND_TRUTH
+#if 0
+  if (!m_solver->m_internal->m_CsGT.Empty()) {
+    m_keyDrawCamTypeKF = DRAW_CAM_KF_GT;
+    m_keyDrawCamTypeLF = DRAW_CAM_LF_GT;
+  }
+  if (!m_solver->m_internal->m_DsGT.empty()) {
+    m_keyDrawDepType = DRAW_DEP_GT;
+  }
 #endif
 #endif
 }
 
-bool ViewerIBA::Run(const bool visualize, const bool step) {
-  m_LBA->Synchronize();
-  m_GBA->Synchronize();
-  const bool _step = step && m_iLF != m_LBA->m_ic2LF.back();
-  if (_step) {
-    m_iLF = m_LBA->m_ic2LF.back();
-  }
-  const LocalFrame &LF = *(LocalFrame *) GetLocalFrame(m_iLF);
-  const int iFrm = LF.m_T.m_iFrm;
+bool ViewerIBA::Run(const bool visualize, const bool step, const int iFrm) {
   if (visualize) {
+    //m_LBA->Synchronize();
+    //m_GBA->Synchronize();
+    const int iLFBkp = m_iLF;
+    const bool _step = step && m_iLF != m_LBA->m_ic2LF.back();
+    if (_step) {
+      m_iLF = m_LBA->m_ic2LF.back();
+    }
+    const LocalFrame &LF = *(LocalFrame *) GetLocalFrame(m_iLF);
+    m_iFrm = LF.m_T.m_iFrm;
     if (_step &&
         //GetKeyFrame(LF.m_iKFNearest)->m_T.m_iFrm == iFrm &&
         //m_iFrmActive >= GetKeyFrames() - 1
-        LF.m_iKFNearest != -1 && m_LBA->m_KFs[LF.m_iKFNearest].m_T.m_iFrm == iFrm &&
-        m_iFrmActive >= m_LBA->m_KFs.size() - 1) {
+        LF.m_iKFNearest != -1 && m_LBA->m_KFs[LF.m_iKFNearest].m_T.m_iFrm == m_iFrm &&
+        m_iFrmActive >= static_cast<int>(m_LBA->m_KFs.size()) - 1) {
       ++m_iFrmActive;
     }
     UpdateCurrentFrame();
@@ -280,13 +288,17 @@ bool ViewerIBA::Run(const bool visualize, const bool step) {
       }
 #endif
       if (activeKF) {
-        if (m_keyDrawCamTypeKF == DRAW_CAM_KF_GBA) {
+        if (m_keyDrawCamTypeKF != DRAW_CAM_KF_LBA) {
           ActivateFrame(nKFs - 1);
         } else if (LF.m_iKFNearest != -1) {
           ActivateFrame(LF.m_iKFNearest);
         }
       } else if (!activeKF) {
-        ActivateLocalFrame(m_iLF);
+        if (m_iFrmActive == nKFs && m_iLFActive != iLFBkp) {
+          ActivateLocalFrame(m_LBA->m_ic2LF.front());
+        } else {
+          ActivateLocalFrame(m_iLF);
+        }
       }
       //Update3DViewPoint();
     }
@@ -308,30 +320,36 @@ bool ViewerIBA::Run(const bool visualize, const bool step) {
     while (m_keyPause && !m_keyStep && !m_handler.Quitted()) {
       Draw();
     }
+    if (m_fileNameScreen != "" && UT::FileNameExtractSuffix<int>(m_fileNameScreen) != -1) {
+      const int iFrmActive = m_iFrmActive;
+      //const bool keyDrawString = m_keyDrawString;
+      //const bool keyDrawTlnType = m_keyDrawTlnType;
+      //const int keyFtrType = m_keyDrawFtrType;
+      //const int keyPrjType = m_keyDrawPrjType;
+      //const int keyErrType3D = m_keyDrawErrType3D;
+      ActivateLocalFrame(m_iLF);
+      //m_keyDrawString = false;
+      //m_keyDrawTlnType = DRAW_TLN_NONE;
+      //m_keyDrawFtrType = DRAW_FTR_NONE;
+      //m_keyDrawPrjType = DRAW_PRJ_NONE;
+      //m_keyDrawErrType3D = DRAW_ERR_NONE;
+      SaveScreen(UT::FileNameIncreaseSuffix(m_fileNameScreen, m_iFrm));
+      ActivateFrame(iFrmActive);
+      //m_keyDrawString = keyDrawString;
+      //m_keyDrawTlnType = keyDrawTlnType;
+      //m_keyDrawFtrType = keyFtrType;
+      //m_keyDrawPrjType = keyPrjType;
+      //m_keyDrawErrType3D = keyErrType3D;
+      Draw();
+    }
+  } else {
+    if (iFrm != -1) {
+      m_iFrm = iFrm;
+    } else if (step) {
+      ++m_iFrm;
+    }
   }
-  if (m_fileNameScreen != "" && UT::FileNameExtractSuffix<int>(m_fileNameScreen) != -1) {
-    const int iFrmActive = m_iFrmActive;
-    //const bool keyDrawString = m_keyDrawString;
-    //const bool keyDrawTlnType = m_keyDrawTlnType;
-    //const int keyFtrType = m_keyDrawFtrType;
-    //const int keyPrjType = m_keyDrawPrjType;
-    //const int keyErrType3D = m_keyDrawErrType3D;
-    ActivateLocalFrame(m_iLF);
-    //m_keyDrawString = false;
-    //m_keyDrawTlnType = DRAW_TLN_NONE;
-    //m_keyDrawFtrType = DRAW_FTR_NONE;
-    //m_keyDrawPrjType = DRAW_PRJ_NONE;
-    //m_keyDrawErrType3D = DRAW_ERR_NONE;
-    SaveScreen(UT::FileNameIncreaseSuffix(m_fileNameScreen, iFrm));
-    ActivateFrame(iFrmActive);
-    //m_keyDrawString = keyDrawString;
-    //m_keyDrawTlnType = keyDrawTlnType;
-    //m_keyDrawFtrType = keyFtrType;
-    //m_keyDrawPrjType = keyPrjType;
-    //m_keyDrawErrType3D = keyErrType3D;
-    Draw();
-  }
-  if (iFrm == m_iFrmSave || (iFrm > m_iFrmSave &&
+  if (m_iFrm == m_iFrmSave || (m_iFrm > m_iFrmSave &&
       !UT::FileExists(UT::FileNameAppendSuffix(m_fileNameSave, m_iFrmSave)))) {
     FILE *fp = fopen(m_fileNameSave.c_str(), "wb");
     if (fp) {
@@ -340,7 +358,7 @@ bool ViewerIBA::Run(const bool visualize, const bool step) {
       SaveB(fp);
       fclose(fp);
       UT::PrintSaved(m_fileNameSave);
-      UT::FileCopy(m_fileNameSave, UT::FileNameAppendSuffix(m_fileNameSave, iFrm));
+      UT::FileCopy(m_fileNameSave, UT::FileNameAppendSuffix(m_fileNameSave, m_iFrm));
       m_handler.Quit();
     }
   }
@@ -363,7 +381,8 @@ int ViewerIBA::Start(const std::string viewFile, const bool pause) {
     fclose(fp);
     UT::PrintSaved(m_fileNameSave);
 #endif
-    iFrmStart = GetLocalFrame(m_LBA->m_ic2LF.back())->m_T.m_iFrm;
+    //iFrmStart = GetLocalFrame(m_LBA->m_ic2LF.back())->m_T.m_iFrm;
+    iFrmStart = m_iFrm;
   }
   const std::string _viewFile = UT::FileNameReplaceDirectory(viewFile, ".", m_fileNameDir);
   fp = fopen(_viewFile.c_str(), "rb");
@@ -425,16 +444,17 @@ void ViewerIBA::DeleteKeyFrame(const int iFrm) {
 }
 
 int ViewerIBA::GetKeyFrames() {
-  return int(m_GBA->m_KFs.size());
+  return static_cast<int>(m_GBA->m_KFs.size());
 }
 
 
 int ViewerIBA::GetLocalFrames() {
-  return int(m_LBA->m_LFs.size());
+  return static_cast<int>(m_LBA->m_LFs.size());
 }
 
 const FRM::Frame* ViewerIBA::GetKeyFrame(int iKF) {
-  return &m_GBA->m_KFs[iKF];
+  //return &m_GBA->m_KFs[iKF];
+  return iKF < GetKeyFrames() ? (FRM::Frame* ) &m_GBA->m_KFs[iKF] : &m_LBA->m_KFs[iKF];
 }
 
 const FRM::Frame* ViewerIBA::GetLocalFrame(int iLF) {
@@ -610,17 +630,13 @@ Depth::InverseGaussian ViewerIBA::GetFeatureDepth(const int iKF, const int ix, c
     if (id < static_cast<int>(m_GBA->m_ds.size())) {
       return m_GBA->m_ds[id];
     }
-#ifdef CFG_DEPTH_MAP
-  case DRAW_DEP_DEPTH_MAP: {
-    //const float d = m_KFs[iKF].m_xs[ix].m_d;
-    const float d = m_dsDM[id];
-    return Depth::InverseGaussian(d, DEPTH_MAP_VARIANCE);
-  }
-#endif
 #ifdef CFG_GROUND_TRUTH
   case DRAW_DEP_GT:
-    if (id < static_cast<int>(m_solver->m_internal->m_dsGT.size())) {
-      return m_solver->m_internal->m_dsGT[id];
+    //if (id < static_cast<int>(m_solver->m_internal->m_dsGT.size())) {
+    //  return m_solver->m_internal->m_dsGT[id];
+    //}
+    if (m_LBA->m_dsGT && id < static_cast<int>(m_LBA->m_dsGT->size())) {
+      return m_LBA->m_dsGT->at(id);
     }
 #endif
   }
@@ -628,9 +644,6 @@ Depth::InverseGaussian ViewerIBA::GetFeatureDepth(const int iKF, const int ix, c
 }
 
 void ViewerIBA::UpdateCurrentFrame() {
-#ifdef CFG_DEPTH_MAP
-  m_iFrmTexZ = -1;
-#endif
   m_iFrmTexRGB = -1;
 #ifdef CFG_STEREO
   m_iFrmTexRGBr = -1;
@@ -643,17 +656,24 @@ void ViewerIBA::UpdateCurrentFrame() {
     m_RMr.Set(m_K.m_Kr, &m_K.m_Rr);
   }
 #endif
-  const int nKFs = static_cast<int>(m_solver->m_internal->m_iFrmsKF.size());
+  //const std::vector<LocalMap::CameraKF> &CsKF = m_solver->m_internal->m_CsKF;
+  //const int nKFs = static_cast<int>(CsKF.size());
+  const std::vector<int> &iFrmsKF = m_LBA->m_iFrmsKF;
+  const int nKFs = static_cast<int>(iFrmsKF.size());
   if (static_cast<int>(m_iFrmsKF.size()) < nKFs) {
-    m_iFrmsKF = m_solver->m_internal->m_iFrmsKF;
-    const std::vector<int> &iKF2d = m_solver->m_internal->m_iKF2d;
+    //m_iFrmsKF.resize(nKFs);
+    //for (int iKF = 0; iKF < nKFs; ++iKF) {
+    //  m_iFrmsKF[iKF] = CsKF[iKF].m_iFrm;
+    //}
+    m_iFrmsKF = iFrmsKF;
+    //const std::vector<int> &iKF2d = m_solver->m_internal->m_iKF2d;
+    const std::vector<int> &iKF2d = m_LBA->m_iKF2d;
     while (m_iKF2d.size() < iKF2d.size()) {
       m_iKF2d.push_back(m_iKF2d.back());
     }
     Point2D x;
     CVD::Rgb<ubyte> clr;
     const LA::Vector3ub clrDFT = LA::Vector3ub::Get(0, 255, 255);
-    const int nKFs = GetKeyFrames();
     for (int iKF = 0; iKF < nKFs; ++iKF) {
       const int Nx = (iKF2d[iKF + 1] - iKF2d[iKF]) - (m_iKF2d[iKF + 1] - m_iKF2d[iKF]);
       if (Nx == 0) {
@@ -664,6 +684,7 @@ void ViewerIBA::UpdateCurrentFrame() {
       for (int jKF = iKF; jKF < nKFs; ++jKF) {
         m_iKF2d[jKF + 1] += Nx;
       }
+#if 0
       const KeyFrame &KF = *(KeyFrame *) GetKeyFrame(iKF);
       const std::string ext = UT::FileNameExtractExtension(KF.m_T.m_fileName);
       if (ext == "txt" || ext == "dat" || !UT::ImageLoad(KF.m_T.m_fileName, m_imgRGB, m_imgRGBTmp)
@@ -673,10 +694,11 @@ void ViewerIBA::UpdateCurrentFrame() {
                                        ) {
         continue;
       }
-      const Point2D *xs = m_solver->m_internal->m_xs.data() + iKF2d[iKF + 1] - Nx;
+      //const Point2D *xs = m_solver->m_internal->m_xs.data() + iKF2d[iKF + 1] - Nx;
       LA::Vector3ub *clrs = m_clrsKF.data() + id;
       for (int ix = 0; ix < Nx; ++ix) {
-        x = xs[ix];
+        //x = xs[ix];
+        x = KF.m_xs[ix].m_x;
         if (m_K.m_K.NeedRectification()) {
           x = m_K.m_K.GetDistorted(x);
         }
@@ -685,30 +707,17 @@ void ViewerIBA::UpdateCurrentFrame() {
         clr = m_imgRGB[_iy][_ix];
         clrs[ix].Set(clr.red, clr.green, clr.blue);
       }
-    }
-#ifdef CFG_DEPTH_MAP
-    const CVD::Image<ushort> &Z = m_LFs[m_iLFNewKF].m_ZIP[0];
-    if (UT::ImageValid(Z)) {
-      Point2D x;
-      const Intrinsic &K = m_KIP[0];
-      for (int ix = 0; ix < Nx; ++ix) {
-        K.NormalizedToImage(KF.m_xs[ix].m_x, x);
-        const ushort z = Z[int(x.y())][int(x.x())];
-        if (z == 0) {
-          m_dsDM.push_back(0.0f);
-        } else {
-          m_dsDM.push_back(DEPTH_MAP_FACTOR / z);
-        }
-      }
-    } else {
-      m_dsDM.insert(m_dsDM.end(), Nx, 0.0f);
-    }
 #endif
+    }
   }
 #ifdef CFG_DEBUG
-  UT_ASSERT(m_clrsKF.size() == m_solver->m_internal->m_ds.size());
-  UT_ASSERT(UT::VectorEqual(m_iFrmsKF, m_solver->m_internal->m_iFrmsKF));
-  UT_ASSERT(UT::VectorEqual(m_iKF2d, m_solver->m_internal->m_iKF2d));
+  //UT_ASSERT(m_clrsKF.size() == m_solver->m_internal->m_ds.size());
+  //UT_ASSERT(static_cast<int>(m_iFrmsKF.size()) == nKFs);
+  //for (int iKF = 0; iKF < nKFs; ++iKF) {
+  //  UT_ASSERT(m_iFrmsKF[iKF] == CsKF[iKF].m_iFrm);
+  //}
+  //UT_ASSERT(UT::VectorEqual(m_iKF2d, m_solver->m_internal->m_iKF2d));
+  UT_ASSERT(UT::VectorEqual(m_iFrmsKF, iFrmsKF));
 #endif
   if (m_iFtrActive.Invalid()) {
 #ifdef CFG_DEBUG
@@ -932,9 +941,6 @@ void ViewerIBA::PrintActiveFeatureDepth() {
   const int iKF = m_iFtrActive.m_ix.m_iKF, ix = m_iFtrActive.m_ix.m_ix;
   GetFeatureDepth(iKF, ix, DRAW_DEP_LBA).Print("LBA = ", false, true);
   GetFeatureDepth(iKF, ix, DRAW_DEP_GBA).Print("GBA = ", false, true);
-#ifdef CFG_DEPTH_MAP
-  GetFeatureDepth(iKF, ix, DRAW_DEP_DEPTH_MAP).Print("MAP = ", false, true);
-#endif
 #ifdef CFG_GROUND_TRUTH
   GetFeatureDepth(iKF, ix, DRAW_DEP_GT).Print(" GT = ", false, true);
 #endif
@@ -979,8 +985,8 @@ void ViewerIBA::PrintFeatureTrackKF(const int iKFx, const int ix, const int iKFz
     const FTR::Source &x = KFz.m_xs[ix];
     const Point2D _x = m_K.m_K.GetNormalizedToImage(x.m_x);
     const int id = m_iKF2d[iKFx] + ix;
-    UT::Print("%s[%d] ix = %3d  x = (%.1f %.1f) iX = %d idx = %d\n", str.c_str(), KFz.m_T.m_iFrm, ix,
-              _x.x(), _x.y(), m_solver->m_internal->m_id2X[id], m_solver->m_internal->m_id2idx[id]);
+    UT::Print("%s[%d] ix = %3d  x = (%.1f %.1f)\n", str.c_str(), KFz.m_T.m_iFrm, ix,
+              _x.x(), _x.y());
 #ifdef CFG_STEREO
     if (x.m_xr.Valid()) {
       const Depth::InverseGaussian d = GetFeatureDepth(iKFx, ix);

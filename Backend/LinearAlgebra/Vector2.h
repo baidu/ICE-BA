@@ -67,7 +67,8 @@ template<typename TYPE> class Vector2 {
   }
 
   inline void Set(const TYPE v0, const TYPE v1) { this->v0() = v0; this->v1() = v1; }
-  inline void Set(const TYPE *v) { v0() = v[0]; v1() = v[1]; }
+  inline void Set(const float *v);
+  inline void Set(const double *v);
 
   inline void MakeZero() { memset(this, 0, sizeof(Vector2<TYPE>)); }
   inline void MakeMinus() { v0() = -v0(); v1() = -v1(); }
@@ -77,11 +78,13 @@ template<typename TYPE> class Vector2 {
   inline bool Invalid() const { return v0() == UT::Invalid<TYPE>(); }
   inline void Invalidate() { v0() = UT::Invalid<TYPE>(); }
 
-  inline void Get(TYPE *v) const { v[0] = v0(); v[1] = v1(); }
+  inline void Get(float *v) const;
+  inline void Get(double *v) const;
   inline void GetScaled(const TYPE s, Vector2<TYPE> &v) const { v.v0() = s * v0(); v.v1() = s * v1(); }
   inline void GetScaled(const Vector2<TYPE> &s, Vector2<TYPE> &v) const { v.v0() = s.v0() * v0(); v.v1() = s.v1() * v1(); }
   inline TYPE SquaredLength() const { return v0() * v0() + v1() * v1(); }
   inline TYPE Dot(const Vector2<TYPE> &v) const { return v0() * v.v0() + v1() * v.v1(); }
+  inline TYPE Dot(const TYPE v0, const TYPE v1) const { return this->v0() * v0 + this->v1() * v1; }
   inline TYPE Sum() const { return v0() + v1(); }
   inline void SaveB(FILE *fp) const { UT::SaveB(*this, fp); }
   inline void LoadB(FILE *fp) { UT::LoadB(*this, fp); }
@@ -145,6 +148,27 @@ typedef Vector2<ushort> Vector2us;
 typedef Vector2<int   > Vector2i;
 typedef Vector2<float > Vector2f;
 typedef Vector2<double> Vector2d;
+
+template<> inline void Vector2f::Set(const float *v) { memcpy(this, v, sizeof(Vector2f)); }
+template<> inline void Vector2d::Set(const double *v) { memcpy(this, v, sizeof(Vector2d)); }
+template<> inline void Vector2f::Set(const double *v) {
+  v0() = static_cast<float>(v[0]);
+  v1() = static_cast<float>(v[1]);
+}
+template<> inline void Vector2d::Set(const float *v) {
+  v0() = static_cast<double>(v[0]);
+  v1() = static_cast<double>(v[1]);
+}
+template<> inline void Vector2f::Get(float *v) const { memcpy(v, this, sizeof(Vector2f)); }
+template<> inline void Vector2d::Get(double *v) const { memcpy(v, this, sizeof(Vector2d)); }
+template<> inline void Vector2f::Get(double *v) const {
+  v[0] = static_cast<double>(v0());
+  v[1] = static_cast<double>(v1());
+}
+template<> inline void Vector2d::Get(float *v) const {
+  v[0] = static_cast<float>(v0());
+  v[1] = static_cast<float>(v1());
+}
 
 }
 

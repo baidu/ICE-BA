@@ -38,9 +38,9 @@ class AxisAngle : public LA::AlignedVector4f {
     Normalize();
   }
 
-  inline void SetRodrigues(const LA::AlignedVector3f &w) {
+  inline void SetRodrigues(const LA::AlignedVector3f &w, const float eps) {
     const float th = sqrtf(w.SquaredLength());
-    if (th < FLT_EPSILON) {
+    if (th < eps) {
       MakeIdentity();
     } else {
       this->xyzw() = w.xyzr() * (1.0f / th);
@@ -73,14 +73,18 @@ class AxisAngle : public LA::AlignedVector4f {
   }
   static inline AxisAngle GetRandom(const float thMax) { AxisAngle kth; kth.Random(thMax); return kth; }
 
-  inline bool AssertEqual(const AxisAngle &kth, const int verbose = 1, const std::string str = "") const {
-    if (fabs(w()) < FLT_EPSILON && fabs(kth.w()) < FLT_EPSILON)
+  inline bool AssertEqual(const AxisAngle &kth, const int verbose = 1,
+                          const std::string str = "") const {
+    if (fabs(w()) < FLT_EPSILON && fabs(kth.w()) < FLT_EPSILON) {
       return true;
+    }
     AxisAngle kth1 = *this, kth2 = kth;
-    if (kth1.w() > UT_PI)
+    if (kth1.w() > UT_PI) {
       kth1.w() = kth1.w() - UT_2PI;
-    if (kth2.w() > UT_PI)
+    }
+    if (kth2.w() > UT_PI) {
       kth2.w() = kth2.w() - UT_2PI;
+    }
     if ((kth1.w() > 0.0f && kth2.w() < 0.0f) ||
         (kth1.w() < 0.0f && kth2.w() > 0.0f)) {
       kth2.MakeMinus();
@@ -108,7 +112,9 @@ class Quaternion : public LA::AlignedVector4f {
  public:
 
   inline Quaternion() {}
-  inline Quaternion(const LA::AlignedVector3f &w) { SetRodrigues(w); }
+  inline Quaternion(const LA::AlignedVector3f &w, const float eps) {
+    SetRodrigues(w, eps);
+  }
   inline Quaternion(const LA::AlignedVector4f &q) { xyzw() = q.xyzw(); }
 
   inline void Get(float *v) const { memcpy(v, this, 16); }
@@ -124,9 +130,9 @@ class Quaternion : public LA::AlignedVector4f {
     return _q;
   }
 
-  inline void SetRodrigues(const LA::AlignedVector3f &w) {
+  inline void SetRodrigues(const LA::AlignedVector3f &w, const float eps) {
     const float th2 = w.SquaredLength(), th = sqrtf(th2);
-    if (th < FLT_EPSILON) {
+    if (th < eps) {
       const float s = 1.0f / sqrtf(th2 + 4.0f);
       this->xyzw() = w.xyzr() * s;
       this->w() = s + s;
@@ -136,12 +142,13 @@ class Quaternion : public LA::AlignedVector4f {
       this->w() = UT_COSF(thh);
     }
   }
-  inline void GetRodrigues(LA::AlignedVector3f &w) const {
-    const float thh = UT_ACOSF(this->w()), sthh = UT_SINF(thh);
-    if (sthh < FLT_EPSILON)
+  inline void GetRodrigues(LA::AlignedVector3f &w, const float eps) const {
+    const float thh = UT_DOT_TO_ANGLE(this->w()), th = thh + thh;
+    if (th < eps) {
       w.MakeZero();
-    else
-      w.xyzr() = xyzw() * (thh * 2.0f / sthh);
+    } else {
+      w.xyzr() = xyzw() * (th / UT_SINF(thh));
+    }
   }
   inline void SetAxisAngle(const AxisAngle &kth) {
     const float thh = kth.w() * 0.5f;
@@ -185,12 +192,13 @@ class Quaternion : public LA::AlignedVector4f {
   inline void Slerp(const float w1, const Quaternion &q1, const Quaternion &q2) {
     x() = q1.Dot(q2);
     if (x() > 0.0f) {
-      if (x() > 1.0f)
+      if (x() > 1.0f) {
         x() = 0.0f;
-      //else if (x() < -1.0f)
+      //} else if (x() < -1.0f)
       //  x() = UT_PI;
-      else
+      } else {
         x() = UT_ACOSF(x());
+      }
       if (fabs(x()) < FLT_EPSILON) {
         *this = q1;
         return;
@@ -202,12 +210,13 @@ class Quaternion : public LA::AlignedVector4f {
       Normalize();
     } else {
       x() = -x();
-      if (x() > 1.0f)
+      if (x() > 1.0f) {
         x() = 0.0f;
-      //else if (x() < -1.0f)
+      //} else if (x() < -1.0f) {
       //  x() = UT_PI;
-      else
+      } else {
         x() = UT_ACOSF(x());
+      }
       if (fabs(x()) < FLT_EPSILON) {
         *this = q1;
         return;
@@ -359,11 +368,14 @@ class SkewSymmetricMatrix : public LA::AlignedVector3f {
   inline float m21() const { return x(); }
   inline float m22() const { return 0.0f; }
 
-  inline LA::AlignedMatrix3x3f GetAlignedMatrix3x3f() const {
-    LA::AlignedMatrix3x3f M;
+  inline void Get(LA::AlignedMatrix3x3f &M) const {
     M.m00() = m00();  M.m01() = m01();  M.m02() = m02();
     M.m10() = m10();  M.m11() = m11();  M.m12() = m12();
     M.m20() = m20();  M.m21() = m21();  M.m22() = m22();
+  }
+  inline LA::AlignedMatrix3x3f GetAlignedMatrix3x3f() const {
+    LA::AlignedMatrix3x3f M;
+    Get(M);
     return M;
   }
   inline void GetSquared(LA::SymmetricMatrix3x3f &M) const {
@@ -542,7 +554,9 @@ class Rotation3D : public LA::AlignedMatrix3x3f {
  public:
 
   inline Rotation3D() {}
-  inline Rotation3D(const LA::AlignedVector3f &w) { SetRodrigues(w); }
+  inline Rotation3D(const LA::AlignedVector3f &w, const float eps) {
+    SetRodrigues(w, eps);
+  }
   inline Rotation3D(const Quaternion &q) { SetQuaternion(q); }
   inline Rotation3D(const LA::AlignedMatrix3x3f &R) {
     memcpy(this, &R, sizeof(Rotation3D));
@@ -621,10 +635,10 @@ class Rotation3D : public LA::AlignedMatrix3x3f {
     SetQuaternion(q);
   }
 
-  inline void SetRodrigues(const LA::AlignedVector3f &w) {
+  inline void SetRodrigues(const LA::AlignedVector3f &w, const float eps) {
     const LA::AlignedVector3f w2 = w.xyzr() * w.xyzr();
     const float th2 = w2.Sum(), th = sqrtf(th2);
-    if (th2 < FLT_EPSILON) {
+    if (th < eps) {
       Quaternion q;
       const float s = 1.0f / sqrtf(th2 + 4.0f);
       q.xyzw() = w.xyzr() * s;
@@ -643,10 +657,10 @@ class Rotation3D : public LA::AlignedMatrix3x3f {
     r10() = t2wxy - t1w.z();  r11() = t3 + t2w2.y();    r12() = t2wyz + t1w.x();
     r20() = t2wxz + t1w.y();  r21() = t2wyz - t1w.x();  r22() = t3 + t2w2.z();
   }
-  inline void SetRodriguesXY(const LA::Vector2f &w) {
+  inline void SetRodriguesXY(const LA::Vector2f &w, const float eps) {
     const LA::Vector2f w2 = w * w;
     const float th2 = w2.Sum(), th = sqrtf(th2);
-    if (th2 < FLT_EPSILON) {
+    if (th < eps) {
       Quaternion q;
       const float s = 1.0f / sqrtf(th2 + 4.0f);
       q.x() = w.x() * s;
@@ -665,43 +679,47 @@ class Rotation3D : public LA::AlignedMatrix3x3f {
     r10() = t2wxy;          r11() = t3 + t2w2.y();  r12() = t1w.x();
     r20() = t1w.y();        r21() = -t1w.x();       r22() = t3;
   }
-  inline void GetRodrigues(LA::AlignedVector3f &w) const {
+  inline void GetRodrigues(LA::AlignedVector3f &w, const float eps) const {
     //AxisAngle kth;
     //GetAxisAngle(kth);
     //kth.GetRodrigues(w);
-    const float tr = Trace(), cth = (tr - 1.0f) * 0.5f, th = UT_DOT_TO_ANGLE(cth), sth = UT_SINF(th);
-    const float t = fabs(sth) < FLT_EPSILON ? 0.5f : th / (sth * 2.0f);
+    const float tr = Trace(), cth = (tr - 1.0f) * 0.5f, th = UT_DOT_TO_ANGLE(cth);
+    const float t = th < eps ? 0.5f : th / (UT_SINF(th) * 2.0f);
     w.x() = r12() - r21();
     w.y() = r20() - r02();
     w.z() = r01() - r10();
     w *= t;
   }
-  inline void GetRodriguesXY(LA::Vector2f &w) const {
-    const float tr = Trace(), cth = (tr - 1.0f) * 0.5f, th = UT_DOT_TO_ANGLE(cth), sth = UT_SINF(th);
-    const float t = fabs(sth) < FLT_EPSILON ? 0.5f : th / (sth * 2.0f);
+  inline void GetRodriguesXY(LA::Vector2f &w, const float eps) const {
+    const float tr = Trace(), cth = (tr - 1.0f) * 0.5f, th = UT_DOT_TO_ANGLE(cth);
+    const float t = th < eps ? 0.5f : th / (UT_SINF(th) * 2.0f);
     w.x() = (r12() - r21()) * t;
     w.y() = (r20() - r02()) * t;
   }
-  inline float GetRodriguesZ() const {
-    const float tr = Trace(), cth = (tr - 1.0f) * 0.5f, th = UT_DOT_TO_ANGLE(cth), sth = UT_SINF(th);
-    const float t = fabs(sth) < FLT_EPSILON ? 0.5f : th / (sth * 2.0f);
+  inline float GetRodriguesZ(const float eps) const {
+    const float tr = Trace(), cth = (tr - 1.0f) * 0.5f, th = UT_DOT_TO_ANGLE(cth);
+    const float t = th < eps ? 0.5f : th / (UT_SINF(th) * 2.0f);
     return (r01() - r10()) * t;
   }
-  inline LA::AlignedVector3f GetRodrigues() const {
+  inline LA::AlignedVector3f GetRodrigues(const float eps) const {
     LA::AlignedVector3f w;
-    GetRodrigues(w);
+    GetRodrigues(w, eps);
     return w;
   }
-  inline LA::Vector2f GetRodriguesXY() const {
+  inline LA::Vector2f GetRodriguesXY(const float eps) const {
     LA::Vector2f w;
-    GetRodriguesXY(w);
+    GetRodriguesXY(w, eps);
     return w;
   }
-  static inline void GetRodriguesJacobian(const LA::AlignedVector3f &w, LA::AlignedMatrix3x3f &Jr) {
+  static inline void GetRodriguesJacobian(const LA::AlignedVector3f &w, LA::AlignedMatrix3x3f &Jr,
+                                          const float eps) {
     const LA::AlignedVector3f w2(w.xyzr() * w.xyzr());
     const float th2 = w2.Sum(), th = sqrtf(th2);
-    if (th2 < FLT_EPSILON) {
-      Jr.MakeIdentity();
+    if (th < eps) {
+      //Jr.MakeIdentity();
+      const SkewSymmetricMatrix S = w * (-0.5f);
+      S.Get(Jr);
+      Jr.IncreaseDiagonal(1.0f);
       return;
     }
     const float th2I = 1.0f / th2;
@@ -718,17 +736,22 @@ class Rotation3D : public LA::AlignedMatrix3x3f {
     Jr.m10() = t2wxy - t1w.z(); Jr.m11() = t3 + t2w2.y(); Jr.m12() = t2wyz + t1w.x();
     Jr.m20() = t2wxz + t1w.y(); Jr.m21() = t2wyz - t1w.x(); Jr.m22() = t3 + t2w2.z();
   }
-  static inline LA::AlignedMatrix3x3f GetRodriguesJacobian(const LA::AlignedVector3f &w) {
+  static inline LA::AlignedMatrix3x3f GetRodriguesJacobian(const LA::AlignedVector3f &w,
+                                                           const float eps) {
     LA::AlignedMatrix3x3f Jr;
-    GetRodriguesJacobian(w, Jr);
+    GetRodriguesJacobian(w, Jr, eps);
     return Jr;
   }
   static inline void GetRodriguesJacobianInverse(const LA::AlignedVector3f &w,
-                                                 LA::AlignedMatrix3x3f &JrI) {
+                                                 LA::AlignedMatrix3x3f &JrI,
+                                                 const float eps) {
     const LA::AlignedVector3f w2(w.xyzr() * w.xyzr());
     const float th2 = w2.Sum(), th = sqrtf(th2);
-    if (th2 < FLT_EPSILON) {
-      JrI.MakeIdentity();
+    if (th < eps) {
+      //JrI.MakeIdentity();
+      const SkewSymmetricMatrix S = w * 0.5f;
+      S.Get(JrI);
+      JrI.IncreaseDiagonal(1.0f);
       return;
     }
     const float th2I = 1.0f / th2, t1 = -0.5f;
@@ -744,11 +767,15 @@ class Rotation3D : public LA::AlignedMatrix3x3f {
     JrI.m20() = t2wxz + t1w.y();  JrI.m21() = t2wyz - t1w.x();  JrI.m22() = t3 + t2w2.z();
   }
   static inline void GetRodriguesJacobianInverseXY(const LA::AlignedVector3f &w,
-                                                   LA::AlignedMatrix2x3f &JrI) {
+                                                   LA::AlignedMatrix2x3f &JrI,
+                                                   const float eps) {
     const float th2 = w.SquaredLength(), th = sqrtf(th2);
-    if (th2 < FLT_EPSILON) {
-      JrI.MakeZero();
-      JrI.m00() = JrI.m11() = 1.0f;
+    if (th < eps) {
+      //JrI.MakeZero();
+      //JrI.m00() = JrI.m11() = 1.0f;
+      const SkewSymmetricMatrix S = w * 0.5f;
+      JrI.m00() = 1.0f;   JrI.m01() = -S.z(); JrI.m02() = S.y();
+      JrI.m10() = S.z();  JrI.m11() = 1.0f;   JrI.m12() = -S.x();
       return;
     }
     const float th2I = 1.0f / th2, t1 = -0.5f;
@@ -764,9 +791,10 @@ class Rotation3D : public LA::AlignedMatrix3x3f {
     JrI.m00() = t3 + t2wxx;       JrI.m01() = t2wxy + t1w.z();  JrI.m02() = t2wxz - t1w.y();
     JrI.m10() = t2wxy - t1w.z();  JrI.m11() = t3 + t2wyy;       JrI.m12() = t2wyz + t1w.x();
   }
-  static inline LA::AlignedMatrix3x3f GetRodriguesJacobianInverse(const LA::AlignedVector3f &w) {
+  static inline LA::AlignedMatrix3x3f GetRodriguesJacobianInverse(const LA::AlignedVector3f &w,
+                                                                  const float eps) {
     LA::AlignedMatrix3x3f JrI;
-    GetRodriguesJacobianInverse(w, JrI);
+    GetRodriguesJacobianInverse(w, JrI, eps);
     return JrI;
   }
 
@@ -1035,11 +1063,10 @@ class Rotation3D : public LA::AlignedMatrix3x3f {
 
   inline bool AssertEqual(const Rotation3D &R, const int verbose = 1, const std::string str = "",
                           const float eps = 0.001745329252f) const {
-    //if (UT::AssertEqual(&r00(), 12, 0, eps))
-    //  return true;
     const float dr = Rotation3D::GetAngle(*this, R);
     //const float eps = 0.1f * UT_FACTOR_DEG_TO_RAD;
-    if (UT::AssertEqual(dr, 0.0f, verbose, str, eps)) {
+    if ((eps < 0.0f && UT::VectorAssertEqual(&r00(), &R.r00(), 12, verbose, str, eps)) ||
+        (eps >= 0.0f && UT::AssertEqual(dr, 0.0f, verbose, str, eps))) {
       return true;
     } else if (verbose) {
       UT::PrintSeparator();
@@ -1051,50 +1078,61 @@ class Rotation3D : public LA::AlignedMatrix3x3f {
   }
 
   inline bool AssertOrthogonal(const int verbose = 1, const std::string str = "") const {
-    if (!UT::AssertEqual(Determinant(), 1.0f, verbose, str + "|R|"))
+    if (!UT::AssertEqual(Determinant(), 1.0f, verbose, str + "|R|")) {
       return false;
-    if (!AssertOrthogonalRows(verbose, str))
+    }
+    if (!AssertOrthogonalRows(verbose, str)) {
       return false;
+    }
     const Rotation3D RT = GetTranspose();
-    if (!RT.AssertOrthogonalRows(verbose, str + ".T"))
+    if (!RT.AssertOrthogonalRows(verbose, str + ".T")) {
       return false;
+    }
     return true;
   }
   inline bool AssertOrthogonalRows(const int verbose = 1, const std::string str = "",
                                    const float eps = 0.001745329252f) const {
     //const float eps = 0.1f * UT_FACTOR_DEG_TO_RAD;
     const float d00 = r_00_01_02_x().vdot012(r_00_01_02_x());
-    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(d00), 0.0f, verbose, str + ".rxTrx", eps))
+    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(d00), 0.0f, verbose, str + ".rxTrx", eps)) {
       return false;
+    }
     const float d01 = r_00_01_02_x().vdot012(r_10_11_12_x());
-    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(d01) - UT_PI_2, 0.0f, verbose, str + ".rxTry", eps))
+    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(d01) - UT_PI_2, 0.0f, verbose, str + ".rxTry", eps)) {
       return false;
+    }
     const float d02 = r_00_01_02_x().vdot012(r_20_21_22_x());
-    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(d02) - UT_PI_2, 0.0f, verbose, str + ".rxTrz", eps))
+    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(d02) - UT_PI_2, 0.0f, verbose, str + ".rxTrz", eps)) {
       return false;
+    }
     const float d11 = r_10_11_12_x().vdot012(r_10_11_12_x());
-    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(d11), 0.0f, verbose, str + ".ryTry", eps))
+    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(d11), 0.0f, verbose, str + ".ryTry", eps)) {
       return false;
+    }
     const float d12 = r_10_11_12_x().vdot012(r_20_21_22_x());
-    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(d12) - UT_PI_2, 0.0f, verbose, str + ".ryTrz", eps))
+    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(d12) - UT_PI_2, 0.0f, verbose, str + ".ryTrz", eps)) {
       return false;
+    }
     const float d22 = r_20_21_22_x().vdot012(r_20_21_22_x());
-    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(d22), 0.0f, verbose, str + ".rzTrz", eps))
+    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(d22), 0.0f, verbose, str + ".rzTrz", eps)) {
       return false;
+    }
 
     xp128f c = r_10_11_12_x().vcross012(r_20_21_22_x());
-
     const float dc0 = c.vdot012(r_00_01_02_x());
-    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(dc0), 0.0f, verbose, str + ".rx", eps))
+    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(dc0), 0.0f, verbose, str + ".rx", eps)) {
       return false;
+    }
     c = r_20_21_22_x().vcross012(r_00_01_02_x());
     const float dc1 = c.vdot012(r_10_11_12_x());
-    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(dc1), 0.0f, verbose, str + ".ry", eps))
+    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(dc1), 0.0f, verbose, str + ".ry", eps)) {
       return false;
+    }
     c = r_00_01_02_x().vcross012(r_10_11_12_x());
     const float dc2 = c.vdot012(r_20_21_22_x());
-    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(dc2), 0.0f, verbose, str + ".rz", eps))
+    if (!UT::AssertEqual(UT_DOT_TO_ANGLE(dc2), 0.0f, verbose, str + ".rz", eps)) {
       return false;
+    }
     return true;
   }
 
@@ -1175,9 +1213,9 @@ class EigenQuaternion : public EigenVector4f {
     const float s = 1.0f / ::sqrtf(SquaredLength());
     (*this) *= w() > 0.0f ? s : -s;
   }
-  inline void SetRodrigues(const EigenVector3f &e_w) {
-    const float th = ::sqrtf(e_w.SquaredLength());
-    if (th < FLT_EPSILON) {
+  inline void SetRodrigues(const EigenVector3f &e_w, const float eps) {
+    const float th = sqrtf(e_w.SquaredLength());
+    if (th < eps) {
       block<3, 1>(0, 0) = e_w * 0.5f;
       w() = 1.0f;
       Normalize();
@@ -1228,7 +1266,9 @@ class EigenRotation3D : public EigenMatrix3x3f {
   inline EigenRotation3D() : EigenMatrix3x3f() {}
   inline EigenRotation3D(const Eigen::Matrix3f &e_R) : EigenMatrix3x3f(e_R) {}
   inline EigenRotation3D(const EigenMatrix3x3f &e_R) : EigenMatrix3x3f(e_R) {}
-  inline EigenRotation3D(const EigenVector3f &e_w) { SetRodrigues(e_w); }
+  inline EigenRotation3D(const EigenVector3f &e_w, const float eps) {
+    SetRodrigues(e_w, eps);
+  }
   inline EigenRotation3D(const EigenAxisAngle &e_kth) { SetAxisAngle(e_kth); }
   inline EigenRotation3D(const EigenQuaternion &e_q) { SetQuaternion(e_q); }
   inline EigenRotation3D(const Rotation3D &R) : EigenMatrix3x3f(R) {}
@@ -1247,44 +1287,58 @@ class EigenRotation3D : public EigenMatrix3x3f {
     return e_R * e_X; 
   }
   inline EigenRotation3D GetTranspose() const { return EigenRotation3D(transpose()); }
-  inline void SetRodrigues(const EigenVector3f &e_w) {
+  inline void SetRodrigues(const EigenVector3f &e_w, const float eps) {
 #if 0
     EigenAxisAngle e_kth;
     e_kth.SetRodrigues(e_w);
     SetAxisAngle(e_kth);
 #else
     Rotation3D R;
-    R.SetRodrigues(e_w.GetAlignedVector3f());
+    R.SetRodrigues(e_w.GetAlignedVector3f(), eps);
     *this = R;
 #endif
   }
-  inline void GetRodrigues(EigenVector3f &e_w) const {
+  inline void GetRodrigues(EigenVector3f &e_w, const float eps) const {
 #if 0
     EigenAxisAngle e_kth;
     GetAxisAngle(e_kth);
     e_kth.GetRodrigues(e_w);
 #else
     const Rotation3D R = GetAlignedMatrix3x3f();
-    e_w = R.GetRodrigues();
+    e_w = R.GetRodrigues(eps);
 #endif
   }
-  inline EigenVector3f GetRodrigues() const { EigenVector3f e_w; GetRodrigues(e_w); return e_w; }
-  static inline EigenMatrix3x3f GetRodriguesJacobian(const EigenVector3f &e_w) {
-    //return EigenMatrix3x3f(Rotation3D::GetRodriguesJacobian(e_w.GetAlignedVector3f()));
-    const float th = sqrtf(e_w.SquaredLength());
-    if (th < FLT_EPSILON)
-      return EigenMatrix3x3f::Identity();
-    const EigenSkewSymmetricMatrix e_S(e_w);
-    const float th2 = th * th;
-    return EigenMatrix3x3f(EigenMatrix3x3f::Identity() - (1.0f - cosf(th)) / th2 * e_S + (th - sinf(th)) / (th2 * th) * e_S * e_S);
+  inline EigenVector3f GetRodrigues(const float eps) const {
+    EigenVector3f e_w;
+    GetRodrigues(e_w, eps);
+    return e_w;
   }
-  static inline EigenMatrix3x3f GetRodriguesJacobianInverse(const EigenVector3f &e_w) {
-    //return EigenMatrix3x3f(Rotation3D::GetRodriguesJacobianInverse(e_w.GetAlignedVector3f()));
-    const float th = sqrtf(e_w.SquaredLength());
-    if (th < FLT_EPSILON)
-      return EigenMatrix3x3f::Identity();
+  static inline EigenMatrix3x3f GetRodriguesJacobian(const EigenVector3f &e_w,
+                                                     const float eps) {
+    //return EigenMatrix3x3f(Rotation3D::GetRodriguesJacobian(e_w.GetAlignedVector3f()));
     const EigenSkewSymmetricMatrix e_S(e_w);
-    return EigenMatrix3x3f(EigenMatrix3x3f::Identity() + 0.5f * e_S + (1.0f / (th * th) - (1.0f + cosf(th)) / (2.0f * th * sinf(th))) * e_S * e_S);
+    const float th = sqrtf(e_w.SquaredLength());
+    if (th < eps) {
+      return EigenMatrix3x3f(EigenMatrix3x3f::Identity() - 0.5f * e_S);
+    } else {
+      const float th2 = th * th;
+      return EigenMatrix3x3f(EigenMatrix3x3f::Identity()
+                          - (1.0f - cosf(th)) / th2 * e_S
+                          + (th - sinf(th)) / (th2 * th) * e_S * e_S);
+    }
+  }
+  static inline EigenMatrix3x3f GetRodriguesJacobianInverse(const EigenVector3f &e_w,
+                                                            const float eps) {
+    //return EigenMatrix3x3f(Rotation3D::GetRodriguesJacobianInverse(e_w.GetAlignedVector3f()));
+    const EigenSkewSymmetricMatrix e_S(e_w);
+    const float th = sqrtf(e_w.SquaredLength());
+    if (th < eps) {
+      return EigenMatrix3x3f(EigenMatrix3x3f::Identity() + 0.5f * e_S);
+    } else {
+      return EigenMatrix3x3f(EigenMatrix3x3f::Identity()
+                           + 0.5f * e_S + (1.0f / (th * th)
+                           - (1.0f + cosf(th)) / (2.0f * th * sinf(th))) * e_S * e_S);
+    }
   }
   inline void operator = (const Eigen::Matrix3f &e_R) { *((EigenMatrix3x3f *) this) = e_R; }
   inline void SetAxisAngle(const EigenAxisAngle &e_kth) { *this = e_kth.toRotationMatrix().transpose(); }

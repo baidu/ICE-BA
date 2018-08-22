@@ -20,15 +20,16 @@
 
 #include "SIMD.h"
 #include <stdarg.h>  // for va_start, va_end
-#ifndef WIN32
-#include <glog/logging.h>
-#endif
 #include <list>
 #include <string>
 #include <algorithm>
 #include <vector>
 
-// #include <gtest/gtest.h>
+#if defined(_N) // for Android ndk
+#undef _N
+#undef _P
+#undef _C
+#endif
 
 #define UT_STRING_WIDTH      79
 #define UT_STRING_WIDTH_MAX  512
@@ -80,16 +81,7 @@
 
 #define UT_DOT_TO_ANGLE(d) UT_ACOSF(UT_CLAMP((d), -1.0f, 1.0f))
 
-#ifndef WIN32
-  #define UT_ASSERT(expression) CHECK(expression)
-#else
-  #define UT_ASSERT(expression) UT::Assert(expression, #expression)
-#endif
-
-// #define UT_ASSERT(expression) {\
-// UT::Assert(expression, #expression);\
-//  EXPECT_TRUE(expression);\
-//}\
+#define UT_ASSERT(expression) UT::Assert(expression, #expression)
 
 #define UT_FLT_EPSILON_MIN        1.0e-05f
 #define UT_FLT_EPSILON_MAX        1.0e-03f
@@ -620,6 +612,11 @@ template<class TYPE> inline void VectorLoad(std::vector<TYPE> &V, FILE *fp) {
     V[i].Load(fp);
   }
 }
+template<class TYPE> inline void VectorSaveB(const SIMD::vector<TYPE> &V, FILE *fp) {
+  const int N = static_cast<int>(V.size());
+  SaveB<int>(N, fp);
+  SaveB<TYPE>(V.data(), N, fp);
+}
 template<class TYPE> inline void VectorSaveB(const std::vector<TYPE> &V, FILE *fp) {
   const int N = static_cast<int>(V.size());
   SaveB<int>(N, fp);
@@ -634,6 +631,12 @@ template<class TYPE> inline bool VectorSaveB(const std::vector<TYPE> &V, const c
   fclose(fp);
   PrintSaved(fileName);
   return true;
+}
+template<class TYPE> inline int VectorLoadB(SIMD::vector<TYPE> &V, FILE *fp) {
+  const int N = LoadB<int>(fp);
+  V.resize(N);
+  LoadB<TYPE>(V.data(), N, fp);
+  return N;
 }
 template<class TYPE> inline int VectorLoadB(std::vector<TYPE> &V, FILE *fp) {
   const int N = LoadB<int>(fp);
@@ -665,6 +668,20 @@ template<class TYPE> inline void VectorsLoadB(std::vector<std::vector<TYPE> > &V
     VectorLoadB(Vs[i], fp);
   }
 }
+template<class TYPE> inline void VectorsSaveB(const std::list<std::vector<TYPE> > &Vs, FILE *fp) {
+  const int N = static_cast<int>(Vs.size());
+  SaveB<int>(N, fp);
+  for (typename std::list<std::vector<TYPE> >::const_iterator i = Vs.begin(); i != Vs.end(); ++i) {
+    VectorSaveB<TYPE>(*i, fp);
+  }
+}
+template<class TYPE> inline void VectorsLoadB(std::list<std::vector<TYPE> > &Vs, FILE *fp) {
+  const int N = LoadB<int>(fp);
+  Vs.resize(N);
+  for (typename  std::list<std::vector<TYPE> >::iterator i = Vs.begin(); i != Vs.end(); ++i) {
+    VectorLoadB<TYPE>(*i, fp);
+  }
+}
 template<class TYPE> inline float VectorMemoryMB(const std::vector<TYPE> &V) {
   return MemoryMB<TYPE>(static_cast<int>(V.capacity()));
 }
@@ -680,15 +697,15 @@ template<class TYPE> inline float VectorsMemoryMB(const std::vector<std::vector<
 template<class TYPE> inline void ListSaveB(const std::list<TYPE> &L, FILE *fp) {
   const int N = static_cast<int>(L.size());
   SaveB<int>(N, fp);
-  for (typename std::list<TYPE>::const_iterator it = L.begin(); it != L.end(); ++it) {
-    SaveB<TYPE>(*it, fp);
+  for (typename std::list<TYPE>::const_iterator i = L.begin(); i != L.end(); ++i) {
+    SaveB<TYPE>(*i, fp);
   }
 }
 template<class TYPE> inline void ListLoadB(std::list<TYPE> &L, FILE *fp) {
   const int N = LoadB<int>(fp);
   L.resize(N);
-  for (typename std::list<TYPE>::iterator it = L.begin(); it != L.end(); ++it) {
-    LoadB<TYPE>(*it, fp);
+  for (typename std::list<TYPE>::iterator i = L.begin(); i != L.end(); ++i) {
+    LoadB<TYPE>(*i, fp);
   }
 }
 
@@ -881,57 +898,104 @@ template<class ERROR, class INDEX> class ES {
 };
 
 template<class TYPE> inline
-bool AssertReduction(const TYPE &e1, const TYPE &e2,
+bool AssertReduction(const TYPE &v1, const TYPE &v2,
                      const int verbose = 1, const std::string str = "",
-                     const float eMin = FLT_EPSILON, const float eMax = FLT_MAX,
+                     const float vMin = FLT_EPSILON, const float vMax = FLT_MAX,
                      const float eps = FLT_EPSILON) {
-  const float e1_2 = e1.SquaredLength();
-  const float e2_2 = e2.SquaredLength();
-  if (e2_2 <= e1_2 + eps ||  std::max(e1_2, e2_2) < eMin * eMin) {
+  const float v1_2 = v1.SquaredLength();
+  const float v2_2 = v2.SquaredLength();
+  if (v2_2 <= v1_2 + eps ||  std::max(v1_2, v2_2) < vMin * vMin) {
     return true;
-  } else if (e1_2 > eMax * eMax) {
+  } else if (v1_2 > vMax * vMax) {
     return false;
   }
-  // EXPECT_GE(e1_2, e2_2);
+  // EXPECT_GE(v1_2, v2_2);
   if (verbose > 0) {
     PrintSeparator();
     if (str != "") {
-      UT::Print("%s\n", str.c_str());
+      Print("%s\n", str.c_str());
     }
     if (verbose > 1) {
-      Print("    %e: ", e1_2);  e1.Print(true);
-      Print("--> %e: ", e2_2);  e2.Print(true);
+      Print("    %e: ", v1_2);  v1.Print(true);
+      Print("--> %e: ", v2_2);  v2.Print(true);
     } else {
-      Print("    %f: ", e1_2);  e1.Print(false);
-      Print("--> %f: ", e2_2);  e2.Print(false);
+      Print("    %f: ", v1_2);  v1.Print(false);
+      Print("--> %f: ", v2_2);  v2.Print(false);
     }
   }
   return false;
 }
 template<> inline
-bool AssertReduction<float>(const float &e1, const float &e2, const int verbose,
-                            const std::string str, const float eMin, const float eMax,
+bool AssertReduction<float>(const float &v1, const float &v2, const int verbose,
+                            const std::string str, const float vMin, const float vMax,
                             const float eps) {
-  const float e1_a = fabs(e1);
-  const float e2_a = fabs(e2);
-  if (e2_a <= e1_a + eps || std::max(e1_a, e2_a) < eMin) {
+  const float v1_a = fabs(v1);
+  const float v2_a = fabs(v2);
+  if (v2_a <= v1_a + eps || std::max(v1_a, v2_a) < vMin) {
     return true;
-  } else if (e1_a > eMax) {
+  } else if (v1_a > vMax) {
     return false;
   }
-  // EXPECT_GE(e1_a, e2_a);
+  // EXPECT_GE(v1_a, v2_a);
   if (verbose > 0) {
     PrintSeparator();
     if (str != "") {
-      UT::Print("%s\n", str.c_str());
+      Print("%s\n", str.c_str());
     }
     if (verbose > 1) {
-      Print("    %e --> %e\n", e1, e2);
+      Print("    %e --> %e\n", v1, v2);
     } else {
-      Print("    %f --> %f\n", e1, e2);
+      Print("    %f --> %f\n", v1, v2);
     }
   }
   return false;
+}
+inline void PrintReduction(const float v1, const float v2,
+                           const std::string str = "", const bool e = false,
+                           const bool n = true) {
+  if (str != "") {
+    Print("%s", str.c_str());
+  }
+  if (e) {
+    Print("%e --> %e", v1, v2);
+  } else {
+    Print("%f --> %f", v1, v2);
+  }
+  if (v1 < v2) {
+    Print("*");
+  }
+  if (n) {
+    Print("\n");
+  }
+}
+inline void PrintReduction(const float v1, const float *v2, const int N2,
+                           const std::string str = "", const bool e = false,
+                           const bool n = true) {
+  Print("%s", str.c_str());
+  if (e) {
+    Print("%e", v1);
+    for (int i = 0; i < N2; ++i) {
+      if (v2[i] != FLT_MAX) {
+        Print(" --> %e", v2[i]);
+      }
+    }
+  } else {
+    Print("%f", v1);
+    for (int i = 0; i < N2; ++i) {
+      if (v2[i] != FLT_MAX) {
+        Print(" --> %f", v2[i]);
+      }
+    }
+  }
+  for (int i = 0; i < N2; ++i) {
+    if ((v2[i] != FLT_MAX && v1 < v2[i])) {
+      Print("*");
+      break;
+    }
+  }
+  if (n) {
+    Print("\n");
+  }
 }
 }  // namespace UT
 

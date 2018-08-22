@@ -22,7 +22,7 @@
 namespace FRM {
 
 template<class TYPE> inline void VectorSaveB(const std::vector<TYPE> &V, FILE *fp) {
-  const int N = int(V.size());
+  const int N = static_cast<int>(V.size());
   UT::SaveB(N, fp);
   for (int i = 0; i < N; ++i) {
     V[i].SaveB(fp);
@@ -37,7 +37,7 @@ template<class TYPE> inline void VectorLoadB(std::vector<TYPE> &V, FILE *fp) {
 }
 
 template<class TYPE> inline void VectorSaveB(const SIMD::vector<TYPE> &V, FILE *fp) {
-  const int N = int(V.size());
+  const int N = static_cast<int>(V.size());
   UT::SaveB(N, fp);
   for (int i = 0; i < N; ++i) {
     V[i].SaveB(fp);
@@ -76,15 +76,15 @@ class Tag {
   inline bool operator < (const int iFrm) const { return m_iFrm < iFrm; }
   inline bool operator <= (const Tag &T) const { return m_iFrm <= T.m_iFrm && m_t <= T.m_t; }
   inline bool operator > (const Tag &T) const { return m_iFrm > T.m_iFrm && m_t > T.m_t; }
+  inline bool Valid() const { return m_iFrm >= 0; }
+  inline bool Invalid() const { return m_iFrm == -1; }
+  inline void Invalidate() { m_iFrm = -1; }
   inline void SaveB(FILE *fp) const {
     UT::SaveB(m_iFrm, fp);
     UT::SaveB(m_t, fp);
     UT::StringSaveB(m_fileName, fp);
 #ifdef CFG_STEREO
     UT::StringSaveB(m_fileNameRight, fp);
-#endif
-#ifdef CFG_DEPTH_MAP
-    UT::StringSaveB(m_fileNameDep, fp);
 #endif
   }
   inline void LoadB(FILE *fp) {
@@ -94,9 +94,6 @@ class Tag {
 #ifdef CFG_STEREO
     UT::StringLoadB(m_fileNameRight, fp);
 #endif
-#ifdef CFG_DEPTH_MAP
-    UT::StringLoadB(m_fileNameDep, fp);
-#endif
   }
  public:
   int m_iFrm;
@@ -104,9 +101,6 @@ class Tag {
   std::string m_fileName;
 #ifdef CFG_STEREO
   std::string m_fileNameRight;
-#endif
-#ifdef CFG_DEPTH_MAP
-  std::string m_fileNameDep;
 #endif
 };
 
@@ -132,6 +126,9 @@ class Frame {
  public:
   inline void Initialize(const Tag &T) { m_T = T; m_d.Initialize(); ClearMeasurements(); }
   inline void Initialize(const Frame &F) { *this = F; }
+  inline bool Valid() const { return m_T.Valid(); }
+  inline bool Invalid() const { return m_T.Invalid(); }
+  inline void Invalidate() { m_T.Invalidate(); }
   inline void DeleteKeyFrame(const int iKF, const std::vector<Measurement>::iterator *iZ = NULL,
                              const std::vector<int>::iterator *ik = NULL) {
     const std::vector<Measurement>::iterator _iZ = iZ ? *iZ : std::lower_bound(m_Zs.begin(),
@@ -177,9 +174,8 @@ class Frame {
       return;
     }
     m_iKFsMatch.insert(_ik, iKF);
-    const std::vector<FRM::Measurement>::iterator iZ = std::lower_bound(m_Zs.begin(),
-                                                                        m_Zs.end(), iKF);
-    for (std::vector<FRM::Measurement>::iterator jZ = iZ; jZ != m_Zs.end(); ++jZ) {
+    const std::vector<Measurement>::iterator iZ = std::lower_bound(m_Zs.begin(), m_Zs.end(), iKF);
+    for (std::vector<Measurement>::iterator jZ = iZ; jZ != m_Zs.end(); ++jZ) {
       ++jZ->m_ik;
     }
   }
@@ -195,6 +191,57 @@ class Frame {
       if (k) {
         m_iKFsMatch.erase(_ik);
       }
+    }
+  }
+  inline void DeleteFeatureMeasurementsPrepare(const std::vector<int> &izsDel,
+                                               std::vector<int> *izs) const {
+    const int N = static_cast<int>(izsDel.size());
+#ifdef CFG_DEBUG
+    UT_ASSERT(N > 0);
+#endif
+    const int Nz = static_cast<int>(m_zs.size());
+    izs->resize(Nz + 1);
+    for (int iz1 = 0, iz2 = 0, i = 0, jz = izsDel[i]; iz1 < Nz; ++iz1) {
+#ifdef CFG_DEBUG
+      UT_ASSERT(jz >= iz1);
+#endif
+      if (iz1 == jz) {
+        izs->at(iz1) = -1;
+        jz = ++i == N ? Nz : izsDel[i];
+      } else {
+        izs->at(iz1) = iz2++;
+      }
+    }
+    izs->at(Nz) = Nz - N;
+  }
+  inline void DeleteFeatureMeasurements(const std::vector<int> &izs) {
+    const int Nz1 = static_cast<int>(m_zs.size());
+#ifdef CFG_DEBUG
+    UT_ASSERT(static_cast<int>(izs.size()) == Nz1 + 1);
+    int zCnt = 0;
+    for (int iz1 = 0, iz2 = 0; iz1 < Nz1; ++iz1) {
+      if (izs[iz1] >= 0) {
+        UT_ASSERT(izs[iz1] == iz2++);
+      } else {
+        ++zCnt;
+      }
+    }
+    UT_ASSERT(izs.back() == Nz1 - zCnt);
+#endif
+    for (int iz1 = 0; iz1 < Nz1; ++iz1) {
+      const int iz2 = izs[iz1];
+      if (iz2 >= 0) {
+        m_zs[iz2] = m_zs[iz1];
+      }
+    }
+    const int Nz2 = izs.back();
+    m_zs.resize(Nz2);
+
+    const int NZ = static_cast<int>(m_Zs.size());
+    for (int iZ = 0; iZ < NZ; ++iZ) {
+      Measurement &Z = m_Zs[iZ];
+      for (int iz = Z.m_iz1; iz <= Nz1 && (Z.m_iz1 = izs[iz]) < 0; ++iz);
+      for (int iz = Z.m_iz2; iz <= Nz1 && (Z.m_iz2 = izs[iz]) < 0; ++iz);
     }
   }
   inline void ClearMeasurements() {
@@ -228,32 +275,39 @@ class Frame {
     m_Zs.resize(iZ + 1);
     Measurement &Z = m_Zs[iZ];
     Z.m_iKF = iKF;
-    Z.m_ik = static_cast<int>(m_iKFsMatch.size());
-    const int Nz = int(zs.size());
-    Z.m_iz1 = int(m_zs.size());
+    if (m_iKFsMatch.empty() || m_iKFsMatch.back() < iKF) {
+      Z.m_ik = static_cast<int>(m_iKFsMatch.size());
+      m_iKFsMatch.push_back(iKF);
+    } else {
+      const std::vector<int>::iterator ik = std::lower_bound(m_iKFsMatch.begin(),
+                                                             m_iKFsMatch.end(), iKF);
+      Z.m_ik = static_cast<int>(ik - m_iKFsMatch.begin());
+      if (*ik != iKF) {
+        m_iKFsMatch.insert(ik, iKF);
+      }
+    }
+    const int Nz = static_cast<int>(zs.size());
+    Z.m_iz1 = static_cast<int>(m_zs.size());
     Z.m_iz2 = Z.m_iz1 + Nz;
     m_zs.insert(m_zs.end(), zs.begin(), zs.end());
-#ifdef CFG_DEBUG
-    UT_ASSERT(m_iKFsMatch.empty() || m_iKFsMatch.back() < iKF);
-#endif
-    m_iKFsMatch.push_back(iKF);
   }
-  inline void PushFeatureMeasurement(const int iKF, const int ix, const FTR::Measurement &z,
-                                     int *iZ, int *iz) {
+  inline void PushFeatureMeasurements(const int iKF, const std::vector<FTR::Measurement> &zs,
+                                      int *iZ, int *iz) {
     if (m_Zs.empty() || iKF > m_Zs.back().m_iKF) {
       *iZ = static_cast<int>(m_Zs.size());
       *iz = static_cast<int>(m_zs.size());
-      PushFrameMeasurement(iKF, 1);
-      m_zs.back() = z;
+      PushFrameMeasurement(iKF, zs);
     } else {
+      const int Nz = static_cast<int>(zs.size());
       const std::vector<Measurement>::iterator _iZ = std::lower_bound(m_Zs.begin(),
                                                                       m_Zs.end(), iKF);
       *iZ = static_cast<int>(_iZ - m_Zs.begin());
       if (_iZ->m_iKF == iKF) {
-        *iz = _iZ->m_iz2++;
+        *iz = _iZ->m_iz2;
+        _iZ->m_iz2 += Nz;
         for (std::vector<Measurement>::iterator jZ = _iZ + 1; jZ != m_Zs.end(); ++jZ) {
-          ++jZ->m_iz1;
-          ++jZ->m_iz2;
+          jZ->m_iz1 += Nz;
+          jZ->m_iz2 += Nz;
         }
       } else {
         const std::vector<int>::iterator ik = std::lower_bound(m_iKFsMatch.begin(),
@@ -267,14 +321,13 @@ class Frame {
         }
         *iz = _iZ->m_iz1;
         for (std::vector<Measurement>::iterator jZ = _iZ; jZ != m_Zs.end(); ++jZ) {
-          ++jZ->m_iz1;
-          ++jZ->m_iz2;
+          jZ->m_iz1 += Nz;
+          jZ->m_iz2 += Nz;
         }
-        m_Zs.insert(_iZ, Measurement(iKF, _ik, *iz, *iz + 1));
+        m_Zs.insert(_iZ, Measurement(iKF, _ik, *iz, *iz + Nz));
       }
-      m_zs.insert(m_zs.begin() + *iz, z);
+      m_zs.insert(m_zs.begin() + *iz, zs.begin(), zs.end());
     }
-    m_zs[*iz].m_ix = ix;
   }
   inline void PopFrameMeasurement() {
 #ifdef CFG_DEBUG
@@ -295,7 +348,7 @@ class Frame {
     if (iZ == m_Zs.end() || iZ->m_iKF != iKF) {
       return -1;
     } else {
-      return int(iZ - m_Zs.begin());
+      return static_cast<int>(iZ - m_Zs.begin());
     }
   }
   inline int SearchFeatureMeasurement(const int iKF, const int ix) const {
@@ -416,9 +469,9 @@ class Frame {
       UT_ASSERT(Z1.m_iz2 == Z2.m_iz1);
     }
     UT_ASSERT(m_Zs.back().m_iz2 == static_cast<int>(m_zs.size()));
-    const int nKFsMatch = static_cast<int>(m_iKFsMatch.size());
-    for (int i = 1; i < nKFsMatch; ++i) {
-      UT_ASSERT(m_iKFsMatch[i - 1] < m_iKFsMatch[i]);
+    const int Nk = static_cast<int>(m_iKFsMatch.size());
+    for (int ik = 1; ik < Nk; ++ik) {
+      UT_ASSERT(m_iKFsMatch[ik - 1] < m_iKFsMatch[ik]);
     }
     std::vector<int>::const_iterator ik = m_iKFsMatch.begin();
     for (int iZ = 0; iZ < NZ; ++iZ) {
@@ -470,30 +523,33 @@ class MeasurementMatch {
     m_ik2zm.erase(m_ik2zm.begin() + ik);
     m_SMczms.Erase(ik);
   }
-  inline void InsertFeatureMeasurement1(const int ik, const int iz1) {
+  inline void InsertFeatureMeasurement1(const int ik, const int iz1, const int Nz1) {
     const int i1 = m_ik2zm[ik], i2 = m_ik2zm[ik + 1];
     for (int i = i2 - 1; i >= i1 && m_izms[i].m_iz1 >= iz1; --i) {
-      ++m_izms[i].m_iz1;
+      m_izms[i].m_iz1 += Nz1;
     }
   }
-  inline void InsertFeatureMeasurement2(const int ik, const int iz2) {
+  inline void InsertFeatureMeasurement2(const int ik, const int iz2, const int Nz2) {
     const int Nk = static_cast<int>(m_ik2zm.size()) - 1;
     for (int jk = ik + 1; jk < Nk; ++jk) {
       const int i1 = m_ik2zm[jk], i2 = m_ik2zm[jk + 1];
       for (int i = i2 - 1; i >= i1 && m_izms[i].m_iz2 >= iz2; --i) {
-        ++m_izms[i].m_iz2;
+        m_izms[i].m_iz2 += Nz2;
       }
     }
   }
-  inline void InsertFeatureMeasurementMatch(const int ik, const int iz1, const int iz2) {
+  inline void InsertFeatureMeasurementMatches(const int ik,
+                                              const std::vector<FTR::Measurement::Match> &izms,
+                                              AlignedVector<float> *work) {
     const std::vector<FTR::Measurement::Match>::iterator i =
-      std::lower_bound(m_izms.begin() + m_ik2zm[ik], m_izms.begin() + m_ik2zm[ik + 1], iz2);
-    const int Nk = static_cast<int>(m_ik2zm.size()) - 1;
+      std::lower_bound(m_izms.begin() + m_ik2zm[ik],
+                       m_izms.begin() + m_ik2zm[ik + 1], izms.front().m_iz2);
+    const int Nk = static_cast<int>(m_ik2zm.size()) - 1, Nzm = static_cast<int>(izms.size());
     for (int jk = ik; jk < Nk; ++jk) {
-      ++m_ik2zm[jk + 1];
+      m_ik2zm[jk + 1] += Nzm;
     }
-    m_Mczms.InsertZero(static_cast<int>(i - m_izms.begin()));
-    m_izms.insert(i, FTR::Measurement::Match(iz1, iz2));
+    m_Mczms.InsertZero(static_cast<int>(i - m_izms.begin()), Nzm, work);
+    m_izms.insert(i, izms.begin(), izms.end());
   }
   inline void PushFeatureMeasurementMatches(const std::vector<FTR::Measurement::Match> &izms,
                                             ubyte *first = NULL) {
@@ -508,8 +564,7 @@ class MeasurementMatch {
       m_ik2zm.back() = Nzm2;
     }
     m_izms.insert(m_izms.end(), izms.begin(), izms.end());
-    m_Mczms.Resize(Nzm2, true);
-    m_Mczms.MakeZero(Nzm1, Nzm2);
+    m_Mczms.InsertZero(Nzm1, Nzm, NULL);
 //#ifdef CFG_DEBUG
 #if 0
     for (int i = Nzm1; i < Nzm2; ++i) {
@@ -540,6 +595,57 @@ class MeasurementMatch {
       }
     }
     m_Mczms.Erase(i1, Nzm);
+  }
+  inline void DeleteFeatureMeasurementMatches(const int ik, const int i1, const int i2,
+                                              const std::vector<int> &izs1,
+                                              const std::vector<int> &izs2,
+                                              std::vector<ubyte> *ms = NULL) {
+    if (!izs1.empty() && !izs2.empty()) {
+      int i, j;
+      Camera::Factor::Binary::CC &SMczm = m_SMczms[ik];
+      for (i = j = i1; i < i2; ++i) {
+        const FTR::Measurement::Match &izm = m_izms[i];
+        Camera::Factor::Binary::CC &Mczm = m_Mczms[i];
+        const int iz1 = izs1[izm.m_iz1], iz2 = izs2[izm.m_iz2];
+#ifdef CFG_DEBUG
+        UT_ASSERT(iz1 >= 0 && iz2 >= 0 || iz1 == iz2);
+#endif
+        if (iz1 < 0) {
+          //if (iz1 == -1) {
+          if (ms && ms->at(i) || !ms && iz1 == -1) {
+            Mczm.MakeMinus();
+            SMczm += Mczm;
+          }
+          continue;
+        }
+        m_izms[j].Set(iz1, iz2);
+        m_Mczms[j] = Mczm;
+        if (ms) {
+          ms->at(j) = ms->at(i);
+        }
+        ++j;
+      }
+      const int Nzm = i - j;
+      m_izms.erase(m_izms.begin() + j, m_izms.begin() + i);
+      m_Mczms.Erase(j, Nzm);
+      if (ms) {
+        ms->erase(ms->begin() + j, ms->begin() + i);
+      }
+      const int Nk = m_SMczms.Size();
+      for (int jk = ik + 1; jk <= Nk; ++jk) {
+        m_ik2zm[jk] -= Nzm;
+      }
+    } else if (!izs1.empty()) {
+      const int Nzm = static_cast<int>(m_izms.size());
+      for (int i = i1; i < i2; ++i) {
+        m_izms[i].m_iz1 = izs1[m_izms[i].m_iz1];
+      }
+    } else if (!izs2.empty()) {
+      const int Nzm = static_cast<int>(m_izms.size());
+      for (int i = i1; i < i2; ++i) {
+        m_izms[i].m_iz2 = izs2[m_izms[i].m_iz2];
+      }
+    }
   }
   inline void MakeZero() { m_Mczms.MakeZero(); m_SMczms.MakeZero(); }
   inline void SaveB(FILE *fp) const {

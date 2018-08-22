@@ -152,7 +152,8 @@ bool ViewerIBA::OnKeyDown(int key) {
 #ifdef CFG_GROUND_TRUTH
       case DRAW_CAM_KF_GT:
         m_keyDrawCamTypeLF = DRAW_CAM_LF_GT;
-        if (!m_solver->m_internal->m_DsGT.empty()) {
+        //if (!m_solver->m_internal->m_DsGT.empty()) {
+        if (m_LBA->m_dsGT) {
           m_keyDrawDepType = DRAW_DEP_GT;
         }
         break;
@@ -168,7 +169,8 @@ bool ViewerIBA::OnKeyDown(int key) {
 #ifdef CFG_GROUND_TRUTH
       case DRAW_CAM_LF_GT:
         m_keyDrawCamTypeKF = DRAW_CAM_KF_GT;
-        if (!m_solver->m_internal->m_DsGT.empty()) {
+        //if (!m_solver->m_internal->m_DsGT.empty()) {
+        if (m_LBA->m_dsGT) {
           m_keyDrawDepType = DRAW_DEP_GT;
         }
         break;
@@ -190,7 +192,8 @@ bool ViewerIBA::OnKeyDown(int key) {
               !activeKF && GetCameraLF(m_iLFActive, DRAW_CAM_LF_GT).Valid()) {
       m_keyDrawCamTypeKF.Set(DRAW_CAM_KF_GT);
       m_keyDrawCamTypeLF = DRAW_CAM_LF_GT;
-      if (!m_solver->m_internal->m_DsGT.empty()) {
+      //if (!m_solver->m_internal->m_DsGT.empty()) {
+      if (m_LBA->m_dsGT) {
         m_keyDrawDepType = DRAW_DEP_GT;
       }
     }
@@ -201,8 +204,13 @@ bool ViewerIBA::OnKeyDown(int key) {
   case VW_KEY_XD_DRAW_DEPTH_TYPE_LAST:
     m_keyDrawDepType.Press(key == VW_KEY_XD_DRAW_DEPTH_TYPE_NEXT, false);
     return true;
-  case VW_KEY_XD_DRAW_STRING:     m_keyDrawString.Press();  return true;
-  case VW_KEY_XD_DRAW_TIME_LINE:  m_keyDrawTlnType.Press(); return true;
+  case VW_KEY_XD_DRAW_STRING:
+    m_keyDrawString.Press();
+    return true;
+  case VW_KEY_XD_DRAW_TIME_LINE_NEXT:
+  case VW_KEY_XD_DRAW_TIME_LINE_LAST:
+    m_keyDrawTlnType.Press(key == VW_KEY_XD_DRAW_TIME_LINE_NEXT);
+    return true;
   case VW_KEY_XD_DRAW_TIME_LINE_BRIGHTNESS_INCREASE_1:
   case VW_KEY_XD_DRAW_TIME_LINE_BRIGHTNESS_DECREASE_1:
   case VW_KEY_XD_DRAW_TIME_LINE_BRIGHTNESS_INCREASE_2:
@@ -217,6 +225,28 @@ bool ViewerIBA::OnKeyDown(int key) {
       m_keyDrawTlnPriorVarRot.Press(key == VW_KEY_XD_DRAW_TIME_LINE_BRIGHTNESS_INCREASE_2);
     }
     return true;
+  case VM_KEY_XD_PRINT_CALIBRATION:
+    UT::PrintSeparator();
+    m_K.m_K.Print();
+#ifdef CFG_STEREO
+    m_K.m_Kr.Print();
+#endif
+    return true;
+  case VW_KEY_XD_INPUT_ACTIVE_FEATURE: {
+    const int iFrm = UT::Input<int>(" Frame");
+    const std::vector<GlobalBundleAdjustor::KeyFrame>::const_iterator iKF = std::lower_bound(
+      m_GBA->m_KFs.begin(), m_GBA->m_KFs.end(), iFrm);
+    if (iKF != m_GBA->m_KFs.end() && *iKF == iFrm) {
+      const int ix = UT::Input<int>("Source");
+      if (ix < 0 || ix >= static_cast<int>(iKF->m_xs.size())) {
+        return false;
+      }
+      const int _iKF = static_cast<int>(iKF - m_GBA->m_KFs.begin());
+      const FRM::Frame &F = *(activeKF ? GetKeyFrame(m_iKFActive) : GetLocalFrame(m_iLFActive));
+      const int iz = F.SearchFeatureMeasurement(_iKF, ix);
+      ActivateFeature(FeatureIndex::Source(_iKF, ix), iz);
+    }
+    return false; }
   }
   if (m_keyDrawViewType == DRAW_VIEW_2D || m_keyDrawViewType == DRAW_VIEW_3D) {
     switch (key) {
@@ -261,22 +291,6 @@ bool ViewerIBA::OnKeyDown(int key) {
         return true;
       }
       break;
-    case VW_KEY_XD_INPUT_ACTIVE_FEATURE: {
-      const int iFrm = UT::Input<int>(" Frame");
-      const std::vector<KeyFrame>::const_iterator iKF = std::lower_bound(m_GBA->m_KFs.begin(),
-                                                                         m_GBA->m_KFs.end(), iFrm);
-      if (iKF != m_GBA->m_KFs.end() && *iKF == iFrm) {
-        const int ix = UT::Input<int>("Source");
-        if (ix < 0 || ix >= static_cast<int>(iKF->m_xs.size())) {
-          return false;
-        }
-        const int _iKF = static_cast<int>(iKF - m_GBA->m_KFs.begin());
-        const FRM::Frame &F = *(activeKF ? GetKeyFrame(m_iKFActive) : GetLocalFrame(m_iLFActive));
-        const int iz = F.SearchFeatureMeasurement(_iKF, ix);
-        ActivateFeature(FeatureIndex::Source(_iKF, ix), iz);
-      }
-      return false;
-    }
     case VW_KEY_PROFILE_ACTIVATE:
       if (m_keyDrawViewType != DRAW_VIEW_PROFILE) {
         m_keyDrawViewTypeBkp = m_keyDrawViewType;
@@ -483,18 +497,6 @@ bool ViewerIBA::OnMouseDoubleClicked(const CVD::ImageRef &where, const int butto
   } else if (button == VW_MOUSE_BUTTON_RIGHT) {
     const Point2D x = Point2D(where.x * m_factorWinToImg.x(), where.y * m_factorWinToImg.y());
     x.Print("x = ", false, true);
-#ifdef CFG_DEPTH_MAP
-    const CVD::Image<ushort> &Z = m_LFs[m_iLFActive].m_ZIP[0];
-    if (m_keyDrawViewType == DRAW_VIEW_2D && m_iFrmActive >= int(m_KFs.size()) && UT::ImageValid(Z)) {
-      const float d = Depth::InterpolateDepth(Z, x, m_work);
-      if (d != 0.0f) {
-        const float z = 1.0f / d;
-        UT::Print("z = %f\n", z);
-        const Point3D X = Point3D(m_KIP[0].GetImageToNormalized(x), z);
-        X.Print("X = ", false);
-      }
-    }
-#endif
     return true;
   } else {
     SearchActiveFeatureStart();
@@ -521,6 +523,8 @@ void ViewerIBA::OnResize(const CVD::ImageRef &size) {
 }
 
 void ViewerIBA::SaveB(FILE *fp) {
+  UT::SaveB(m_iLF, fp);
+  UT::SaveB(m_iFrm, fp);
   UT::SaveB(m_iKFActive, fp);
   UT::SaveB(m_iLFActive, fp);
   UT::SaveB(m_iLFActiveLast, fp);
@@ -539,9 +543,6 @@ void ViewerIBA::SaveB(FILE *fp) {
   UT::VectorSaveB(m_iFrmsKF, fp);
   UT::VectorSaveB(m_iKF2d, fp);
   UT::VectorSaveB(m_clrsKF, fp);
-#ifdef CFG_DEPTH_MAP
-  UT::VectorSaveB(m_dsDM, fp);
-#endif
   UT::SaveB(m_frustrum, fp);
   UT::SaveB(m_frustrumActive, fp);
   UT::SaveB(m_translation, fp);
@@ -588,6 +589,8 @@ void ViewerIBA::SaveB(FILE *fp) {
 }
 
 void ViewerIBA::LoadB(FILE *fp) {
+  UT::LoadB(m_iLF, fp);
+  UT::LoadB(m_iFrm, fp);
   UT::LoadB(m_iKFActive, fp);
   UT::LoadB(m_iLFActive, fp);
   UT::LoadB(m_iLFActiveLast, fp);
@@ -604,9 +607,6 @@ void ViewerIBA::LoadB(FILE *fp) {
   UT::VectorLoadB(m_iFrmsKF, fp);
   UT::VectorLoadB(m_iKF2d, fp);
   UT::VectorLoadB(m_clrsKF, fp);
-#ifdef CFG_DEPTH_MAP
-  UT::VectorLoadB(m_dsDM, fp);
-#endif
   UT::LoadB(m_frustrum, fp);
   UT::LoadB(m_frustrumActive, fp);
   UT::LoadB(m_translation, fp);

@@ -14,14 +14,21 @@
  * limitations under the License.
  *****************************************************************************/
 #include "stdafx.h"
-#ifndef CFG_DEBUG
+//#ifndef CFG_DEBUG
 //#define CFG_DEBUG
-#endif
+//#endif
 #ifdef CFG_DEBUG_EIGEN
 //#define LBA_DEBUG_EIGEN_PCG
 #endif
 #include "LocalBundleAdjustor.h"
 #include "Vector12.h"
+
+#if defined WIN32 && defined CFG_DEBUG && defined CFG_GROUND_TRUTH
+//#define LBA_DEBUG_GROUND_TRUTH_STATE
+//#ifdef LBA_DEBUG_GROUND_TRUTH_STATE
+//#define LBA_DEBUG_GROUND_TRUTH_STATE_ERROR
+//#endif
+#endif
 
 //#ifdef CFG_DEBUG
 #if 0
@@ -29,9 +36,6 @@
 #undef LBA_ME_FUNCTION
 #define LBA_ME_FUNCTION ME::FUNCTION_NONE
 #endif
-#endif
-#if defined CFG_DEBUG && defined CFG_GROUND_TRUTH
-//#define LBA_DEBUG_GROUND_TRUTH_STATE
 #endif
 
 void LocalBundleAdjustor::UpdateFactors() {
@@ -41,7 +45,7 @@ void LocalBundleAdjustor::UpdateFactors() {
     UT::Print("*%2d: [LocalBundleAdjustor::UpdateFactors]\n", m_iIter);
   }
 #endif
-  const int nLFs = int(m_LFs.size());
+  const int nLFs = static_cast<int>(m_LFs.size());
   for (int iLF = 0; iLF < nLFs; ++iLF) {
     if (m_ucsLF[iLF] & LBA_FLAG_FRAME_UPDATE_CAMERA) {
       m_SAcusLF[iLF].MakeZero();
@@ -50,22 +54,36 @@ void LocalBundleAdjustor::UpdateFactors() {
       m_SAcmsLF[iLF].MakeZero();
     }
   }
+  const ubyte ucFlag = LBA_FLAG_FRAME_PUSH_TRACK | LBA_FLAG_FRAME_UPDATE_DEPTH;
+  const ubyte udFlag = LBA_FLAG_TRACK_PUSH | LBA_FLAG_TRACK_UPDATE_DEPTH;
+  const float add = UT::Inverse(BA_VARIANCE_REGULARIZATION_DEPTH, BA_WEIGHT_FEATURE);
   const int nKFs = static_cast<int>(m_KFs.size());
   for (int iKF = 0; iKF < nKFs; ++iKF) {
-    if (!(m_ucsKF[iKF] & LBA_FLAG_FRAME_UPDATE_DEPTH)) {
+    if (!(m_ucsKF[iKF] & ucFlag)) {
       continue;
     }
     const ubyte *uds = m_uds.data() + m_iKF2d[iKF];
     KeyFrame &KF = m_KFs[iKF];
     const int Nx = static_cast<int>(KF.m_xs.size());
     for (int ix = 0; ix < Nx; ++ix) {
-      if (!(uds[ix] & LBA_FLAG_TRACK_UPDATE_DEPTH)) {
+      if (!(uds[ix] & udFlag)) {
         continue;
+      } else if (uds[ix] & LBA_FLAG_TRACK_UPDATE_DEPTH) {
+        KF.m_Axps[ix].MakeZero();
+        KF.m_AxpsST[ix].MakeZero();
+        KF.m_Axs[ix].MakeZero();
+        const int iST1 = KF.m_ix2ST[ix], iST2 = KF.m_ix2ST[ix + 1];
+        KF.m_AxsST.MakeZero(iST1, iST2 - iST1);
+        KF.m_Axs[ix].m_Sadd.m_a = add;
+        for (int iST = iST1; iST < iST2; ++iST) {
+          KF.m_AxsST[iST].m_Sadd.m_a = add;
+        }
+      } else {
+        const int iST1 = KF.m_ix2ST[ix], iST2 = KF.m_ix2ST[ix + 1];
+        for (int iST = iST2 - 1; iST >= iST1 && (KF.m_usST[iST] & LBA_FLAG_TRACK_PUSH); --iST) {
+          KF.m_AxsST[iST].m_Sadd.m_a = add;
+        }
       }
-      KF.m_Axps[ix].MakeZero();
-      KF.m_AxpsST[ix].MakeZero();
-      KF.m_Axs[ix].MakeZero();
-      KF.m_AxsST.MakeZero(KF.m_ix2ST[ix], KF.m_ix2ST[ix + 1]);
     }
   }
   UpdateFactorsFeaturePriorDepth();
@@ -110,14 +128,15 @@ void LocalBundleAdjustor::UpdateFactorsFeaturePriorDepth() {
     const int NzKFST = NzKF - g_SNzKF, NZKFST = NZKF - g_SNZKF;
     UT::Print("  FeatureLF = %4d / %4d = %.2f%% (%d / %2d = %.2f%%)\n", g_SNzLF, NzLF,
               UT::Percentage(g_SNzLF, NzLF), g_SNZLF, NZLF, UT::Percentage(g_SNZLF, NZLF));
-    if (g_SNZLFST > 0 || g_SNzLFST > 0)
+    if (g_SNZLFST > 0 || g_SNzLFST > 0) {
       UT::Print("            + %4d / %4d = %.2f%% (%d / %2d = %.2f%%)\n", g_SNzLFST, NzLFST,
                 UT::Percentage(g_SNzLFST, NzLFST), g_SNZLFST, NZLFST, UT::Percentage(g_SNZLFST, NZLFST));
+    }
     UT::Print("  FeatureKF = %4d / %4d = %.2f%% (%d / %2d = %.2f%%)\n", g_SNzKF, NzKF,
               UT::Percentage(g_SNzKF, NzKF), g_SNZKF, NZKF, UT::Percentage(g_SNZKF, NZKF));
     const int Nd = int(m_ds.size()), NdST = Nd - g_SNd;
     UT::Print("  Prior Depth  = %d / %d = %.2f%% + %d / %d = %.2f%%\n", g_SNd, Nd,
-      UT::Percentage(g_SNd, Nd), g_SNdST, NdST, UT::Percentage(g_SNdST, NdST));
+              UT::Percentage(g_SNd, Nd), g_SNdST, NdST, UT::Percentage(g_SNdST, NdST));
   }
 #endif
 }
@@ -132,13 +151,13 @@ void LocalBundleAdjustor::UpdateFactorsFeatureLF() {
                        LBA_FLAG_FRAME_UPDATE_DEPTH;
   const ubyte udFlag = LBA_FLAG_TRACK_PUSH | LBA_FLAG_TRACK_POP |
                        LBA_FLAG_TRACK_UPDATE_DEPTH;
-  const int nLFs = int(m_LFs.size());
+  const int nLFs = static_cast<int>(m_LFs.size());
   for (int iLF = 0; iLF < nLFs; ++iLF) {
     LocalFrame &LF = m_LFs[iLF];
     const Rigid3D &C = m_CsLF[iLF].m_T;
     const bool ucz = (m_ucsLF[iLF] & LBA_FLAG_FRAME_UPDATE_CAMERA) != 0;
     Camera::Factor::Unitary::CC &SAczz = m_SAcusLF[iLF];
-    const int NZ = int(LF.m_Zs.size());
+    const int NZ = static_cast<int>(LF.m_Zs.size());
     for (int iZ = 0; iZ < NZ; ++iZ) {
       const FRM::Measurement &Z = LF.m_Zs[iZ];
       const int iKF = Z.m_iKF;
@@ -184,42 +203,25 @@ void LocalBundleAdjustor::UpdateFactorsFeatureLF() {
             dAczz = A.m_Aczz;
           }
           //dF = A.m_F;
-          FTR::GetFactor<LBA_ME_FUNCTION>(BA_WEIGHT_FEATURE, BA_WEIGHT_PRIOR_DEPTH, Tr,
-                                          KF.m_xs[ix], ds[ix], C, z,
+          FTR::GetFactor<LBA_ME_FUNCTION>(BA_WEIGHT_FEATURE, Tr, KF.m_xs[ix], ds[ix], C, z,
                                           &LF.m_Lzs[iz], &LF.m_Azs1[iz], &A, &U
 #ifdef CFG_STEREO
                                         , m_K.m_br
 #endif
                                         );
-//#ifdef CFG_DEBUG
-#if 0
-          if (iz == 28) {
-            UT::PrintSeparator();
-            Tr[0].Print(true);
-            Tr[1].Print(true);
-            UT::PrintSeparator();
-            KF.m_xs[ix].m_x.Print(true);
-            UT::PrintSeparator();
-            ds[ix].Print(true);
-            UT::PrintSeparator();
-            C.Print(true);
-            UT::PrintSeparator();
-            if (z.m_z.Valid()) {
-              z.m_z.Print(true);
-              z.m_W.Print(true);
-            }
-            if (z.m_zr.Valid()) {
-              z.m_zr.Print(true);
-              z.m_Wr.Print(true);
-            }
-          }
-#endif
           AST.Set(A.m_add, LF.m_Azs1[iz].m_adczA);
           if (Nst >= 1) {
             AST *= 1.0f / Nst;
           }
           LF.m_Nsts[iz] = Nst;
           if (ud) {
+//#ifdef CFG_DEBUG
+#if 0
+            if (iKF == 21 && ix == 316) {
+              UT::Print(" [%d] %d: [%d] %e + %e = %e\n", m_LFs[m_ic2LF.back()].m_T.m_iFrm, m_iIter, LF.m_T.m_iFrm,
+                        KF.m_Axs[ix].m_Sadd.m_a, A.m_add.m_a, KF.m_Axs[ix].m_Sadd.m_a + A.m_add.m_a);
+            }
+#endif
             KF.m_Axs[ix].m_Sadd += A.m_add;
             for (int iST = iST1; iST < iST2; ++iST) {
               KF.m_AxsST[iST].m_Sadd += AST.m_add;
@@ -227,6 +229,13 @@ void LocalBundleAdjustor::UpdateFactorsFeatureLF() {
             }
           } else {
             FTR::Factor::DD::amb(A.m_add, dadd, dadd);
+//#ifdef CFG_DEBUG
+#if 0
+            if (iKF == 21 && ix == 316) {
+              UT::Print(" [%d] %d: [%d] %e + %e = %e\n", m_LFs[m_ic2LF.back()].m_T.m_iFrm, m_iIter, LF.m_T.m_iFrm,
+                        KF.m_Axs[ix].m_Sadd.m_a, dadd.m_a, KF.m_Axs[ix].m_Sadd.m_a + dadd.m_a);
+            }
+#endif
             KF.m_Axs[ix].m_Sadd += dadd;
             if (pushST) {
               int iST;
@@ -339,7 +348,7 @@ void LocalBundleAdjustor::UpdateFactorsFeatureKF() {
   const ubyte ucFlag = LBA_FLAG_FRAME_UPDATE_TRACK_INFORMATION |
                        LBA_FLAG_FRAME_UPDATE_TRACK_INFORMATION_KF;
   const ubyte udFlag = LBA_FLAG_TRACK_UPDATE_INFORMATION | LBA_FLAG_TRACK_UPDATE_INFORMATION_KF;
-  const int nKFs = int(m_KFs.size());
+  const int nKFs = static_cast<int>(m_KFs.size());
   for (int iKF = 0; iKF < nKFs; ++iKF) {
     KeyFrame &KF = m_KFs[iKF];
     const Rigid3D &C = m_CsKF[iKF];
@@ -373,16 +382,30 @@ void LocalBundleAdjustor::UpdateFactorsFeatureKF() {
           dadd = A.m_add;
         }
         //dF = A.m_F;
-        FTR::GetFactor<LBA_ME_FUNCTION>(BA_WEIGHT_FEATURE_KEY_FRAME, BA_WEIGHT_PRIOR_DEPTH,
-                                        Tr, _KF.m_xs[ix], _ds[ix], C, z, &A, &U
+        FTR::GetFactor<LBA_ME_FUNCTION>(BA_WEIGHT_FEATURE_KEY_FRAME, Tr, _KF.m_xs[ix], _ds[ix],
+                                        C, z, &A, &U
 #ifdef CFG_STEREO
                                       , m_K.m_br
 #endif
                                       );
         if (ud) {
+//#ifdef CFG_DEBUG
+#if 0
+          if (_iKF == 21 && ix == 316) {
+            UT::Print(" [%d] %d: [%d] %e + %e = %e\n", m_LFs[m_ic2LF.back()].m_T.m_iFrm, m_iIter, KF.m_T.m_iFrm,
+                      _KF.m_Axs[ix].m_Sadd.m_a, A.m_add.m_a, _KF.m_Axs[ix].m_Sadd.m_a + A.m_add.m_a);
+          }
+#endif
           _KF.m_Axps[ix].m_Sadd += A.m_add;
           _KF.m_Axs[ix].m_Sadd += A.m_add;
         } else {
+//#ifdef CFG_DEBUG
+#if 0
+          if (_iKF == 21 && ix == 316) {
+            UT::Print(" [%d] %d: [%d] %e + %e = %e\n", m_LFs[m_ic2LF.back()].m_T.m_iFrm, m_iIter, KF.m_T.m_iFrm,
+                      _KF.m_Axs[ix].m_Sadd.m_a, dadd.m_a, _KF.m_Axs[ix].m_Sadd.m_a + dadd.m_a);
+          }
+#endif
           FTR::Factor::DD::amb(A.m_add, dadd, dadd);
           _KF.m_Axps[ix].m_Sadd += dadd;
           _KF.m_Axs[ix].m_Sadd += dadd;
@@ -418,7 +441,7 @@ void LocalBundleAdjustor::UpdateFactorsPriorDepth() {
   const ubyte udFlag1 = LBA_FLAG_TRACK_PUSH | LBA_FLAG_TRACK_POP |
                         LBA_FLAG_TRACK_UPDATE_INFORMATION_KF;
   const ubyte udFlag2 = udFlag1 | LBA_FLAG_TRACK_UPDATE_DEPTH;
-  const int nKFs = int(m_KFs.size());
+  const int nKFs = static_cast<int>(m_KFs.size());
   for (int iKF = 0; iKF < nKFs; ++iKF) {
     if (!(m_ucsKF[iKF] & ucFlag2)) {
       continue;
@@ -451,15 +474,7 @@ void LocalBundleAdjustor::UpdateFactorsPriorDepth() {
         {
           Depth::Prior::Factor &A = KF.m_Apds[ix];
           //dF = a.m_F;
-#ifdef CFG_DEPTH_MAP
-          if (KF.m_xs[ix].m_d != 0.0f) {
-            Depth::Prior(KF.m_xs[ix].m_d, DEPTH_MAP_WEIGHT).GetFactor<LBA_ME_FUNCTION>(BA_WEIGHT_PRIOR_DEPTH,
-                                                                                       ds[ix].u(), A);
-          } else
-#endif
-          {
-            zp.GetFactor<LBA_ME_FUNCTION>(BA_WEIGHT_PRIOR_DEPTH, ds[ix].u(), A);
-          }
+          zp.GetFactor<LBA_ME_FUNCTION>(BA_WEIGHT_PRIOR_DEPTH, ds[ix].u(), A);
           dadd = A;
         }
         KF.m_Axps[ix].m_Sadd += dadd;
@@ -531,8 +546,7 @@ void LocalBundleAdjustor::UpdateFactorsPriorDepth() {
             KF.m_usST[iST] |= LBA_FLAG_TRACK_UPDATE_INFORMATION;
             KF.m_usST[iST] &= ~LBA_FLAG_TRACK_PUSH;
           }
-        }
-        else {
+        } else {
           daddST = AST.m_Sadd;
           AST = KF.m_Axps[ix];
           if (Nst > 1) {
@@ -551,8 +565,7 @@ void LocalBundleAdjustor::UpdateFactorsPriorDepth() {
               KF.m_AxsST[iST].m_Sadd += daddST;
               KF.m_usST[iST] |= LBA_FLAG_TRACK_UPDATE_INFORMATION;
             }
-          }
-          else {
+          } else {
             FTR::Factor::DD::amb(AST.m_Sadd, daddST, daddST);
             for (int iST = iST1; iST < iST2; ++iST) {
               KF.m_AxsST[iST].m_Sadd += daddST;
@@ -621,7 +634,7 @@ void LocalBundleAdjustor::UpdateFactorsIMU() {
   //float dF;
   const ubyte ucFlag = LBA_FLAG_CAMERA_MOTION_UPDATE_ROTATION |
                        LBA_FLAG_CAMERA_MOTION_UPDATE_POSITION;
-  const int nLFs = int(m_LFs.size());
+  const int nLFs = static_cast<int>(m_LFs.size());
   for (int ic1 = 0, ic2 = 1; ic2 < nLFs; ic1 = ic2++) {
     const int iLF1 = m_ic2LF[ic1], iLF2 = m_ic2LF[ic2];
     const ubyte ucm1 = m_ucmsLF[iLF1], ucm2 = m_ucmsLF[iLF2];
@@ -647,7 +660,7 @@ void LocalBundleAdjustor::UpdateFactorsIMU() {
     }
     //dF = A.m_F;
     m_DsLF[iLF2].GetFactor(BA_WEIGHT_IMU, m_CsLF[iLF1], m_CsLF[iLF2], m_K.m_pu,
-                           &A, &SAcm2.m_Ab, &U);
+                           &A, &SAcm2.m_Ab, &U, BA_ANGLE_EPSILON);
     if (uc1) {
       m_SAcusLF[iLF1] += A.m_A11.m_Acc;
     } else {
@@ -698,7 +711,7 @@ void LocalBundleAdjustor::UpdateFactorsFixOrigin() {
     return;
   }
   //float dF = m_Af->m_F;
-  m_Zo.GetFactor(m_CsLF[iLF].m_T, m_Ao);
+  m_Zo.GetFactor(m_CsLF[iLF].m_T, m_Ao, BA_ANGLE_EPSILON);
   m_SAcusLF[iLF] += m_Ao.m_A;
   //dF = m_Af->m_F - dF;
   //m_F = dF + m_F;
@@ -810,7 +823,7 @@ void LocalBundleAdjustor::UpdateFactorsFixMotion() {
 }
 
 void LocalBundleAdjustor::UpdateSchurComplement() {
-  const int nLFs = int(m_LFs.size());
+  const int nLFs = static_cast<int>(m_LFs.size());
   for (int iLF = 0; iLF < nLFs; ++iLF) {
     LocalFrame &LF = m_LFs[iLF];
     if (m_ucsLF[iLF] & LBA_FLAG_FRAME_UPDATE_CAMERA) {
@@ -819,7 +832,7 @@ void LocalBundleAdjustor::UpdateSchurComplement() {
       LF.m_SmddsST.MakeZero();
       LF.m_Zm.m_SmddsST.MakeZero();
     } else {
-      const int Nk = int(LF.m_iLFsMatch.size());
+      const int Nk = static_cast<int>(LF.m_iLFsMatch.size());
 #ifdef CFG_DEBUG
       UT_ASSERT(LF.m_Zm.m_SMczms.Size() == Nk);
 #endif
@@ -828,7 +841,8 @@ void LocalBundleAdjustor::UpdateSchurComplement() {
           continue;
         }
         LF.m_Zm.m_SMczms[ik].MakeZero();
-        LF.m_Zm.m_SmddsST.MakeZero(LF.m_Zm.m_ik2zm[ik], LF.m_Zm.m_ik2zm[ik + 1]);
+        const int izm = LF.m_Zm.m_ik2zm[ik], Nzm = LF.m_Zm.m_ik2zm[ik + 1] - izm;
+        LF.m_Zm.m_SmddsST.MakeZero(izm, Nzm);
       }
       const int NZ = int(LF.m_Zs.size());
       for (int iZ = 0; iZ < NZ; ++iZ) {
@@ -989,6 +1003,7 @@ void LocalBundleAdjustor::UpdateSchurComplement() {
       ndsST[idST] = SaddST.m_b;
     }
   }
+  //SIMD::Add(N, UT::Inverse(BA_VARIANCE_REGULARIZATION_DEPTH, BA_WEIGHT_FEATURE), mdds);
   SIMD::Inverse(N, mdds);
   SIMD::Multiply(N, mdds, nds);
   for (int id = 0; id < Nd; ++id) {
@@ -1226,8 +1241,8 @@ void LocalBundleAdjustor::UpdateSchurComplement() {
     }
 #endif
 #ifdef CFG_VERBOSE
-    m_marksTmp.assign(LF.m_iLFsMatch.size(), 0);
-    ubyte *Sczms = m_marksTmp.data();
+    m_marksTmp1.assign(LF.m_iLFsMatch.size(), 0);
+    ubyte *Sczms = m_marksTmp1.data();
 #endif
     const int NI = int(LF.m_Zm.m_Is.size());
     for (int iI = 0; iI < NI; ++iI) {
@@ -1930,6 +1945,15 @@ void LocalBundleAdjustor::SolveSchurComplementGT(const AlignedVector<Camera> &Cs
   if (!m_CsGT) {
     return;
   }
+#ifdef LBA_DEBUG_GROUND_TRUTH_STATE_ERROR
+  const float dpMax = 0.01f;
+  //const float drMax = 0.0f;
+  const float drMax = 0.1f;
+  const float dvMax = 0.1f;
+  const float dbaMax = 0.1f;
+  //const float dbwMax = 0.0f;
+  const float dbwMax = 0.1f;
+#endif
   const int pc = 6, pm = 9;
   const int Nc = static_cast<int>(m_LFs.size());
   xs->Resize(Nc * (pc + pm));
@@ -1942,21 +1966,34 @@ void LocalBundleAdjustor::SolveSchurComplementGT(const AlignedVector<Camera> &Cs
     const int iLF = m_ic2LF[ic];
     const Camera &C = CsLF[iLF], &CGT = m_CsLFGT[iLF];
     Rotation3D::ATB(C.m_T, CGT.m_T, dR);
-    dR.GetRodrigues(dr);
+    dR.GetRodrigues(dr, BA_ANGLE_EPSILON);
     LA::AlignedVector3f::amb(CGT.m_p, C.m_p, dp);
+#ifdef LBA_DEBUG_GROUND_TRUTH_STATE_ERROR
+    dp += LA::AlignedVector3f::GetRandom(dpMax);
+    dr += LA::AlignedVector3f::GetRandom(drMax * UT_FACTOR_DEG_TO_RAD);
+#endif
     xcs[ic].Set(dp, dr);
     if (motion) {
       LA::Vector9f &xm = xms[ic];
       if (CGT.m_v.Valid()) {
         LA::AlignedVector3f::amb(CGT.m_v, C.m_v, dv);
+#ifdef LBA_DEBUG_GROUND_TRUTH_STATE_ERROR
+        dv += LA::AlignedVector3f::GetRandom(dvMax);
+#endif
         xm.Set012(dv);
       }
       if (CGT.m_ba.Valid()) {
         LA::AlignedVector3f::amb(CGT.m_ba, C.m_ba, dba);
+#ifdef LBA_DEBUG_GROUND_TRUTH_STATE_ERROR
+        dba += LA::AlignedVector3f::GetRandom(dbaMax);
+#endif
         xm.Set345(dba);
       }
       if (CGT.m_bw.Valid()) {
         LA::AlignedVector3f::amb(CGT.m_bw, C.m_bw, dbw);
+#ifdef LBA_DEBUG_GROUND_TRUTH_STATE_ERROR
+        dbw += LA::AlignedVector3f::GetRandom(dbwMax * UT_FACTOR_DEG_TO_RAD);
+#endif
         xm.Set678(dbw);
       }
     }
@@ -2028,7 +2065,7 @@ bool LocalBundleAdjustor::SolveSchurComplementLast() {
   const int ic2 = Nc - 1, iLF2 = m_ic2LF[ic2];
   Camera::Factor::Unitary::CC::AmB(m_SAcusLF[iLF2], m_SMcusLF[iLF2], Acc);
   Acc.m_A.IncreaseDiagonal(ap, ar);
-  A.SetBlock(0, 0, Acc.m_A);
+  A.SetBlockDiagonal(0, Acc.m_A);
   const Camera::Factor &Acm2 = m_SAcmsLF[iLF2];
   A.SetBlock(0, pc, Acm2.m_Au.m_Acm);
   b.SetBlock(0, Acc.m_b);
@@ -2583,7 +2620,7 @@ LocalBundleAdjustor::Residual LocalBundleAdjustor::ComputeResidual(const LA::Ali
 }
 
 void LocalBundleAdjustor::SolveBackSubstitution() {
-  const int nKFs = int(m_KFs.size());
+  const int nKFs = static_cast<int>(m_KFs.size());
   for (int iKF = 0; iKF < nKFs; ++iKF) {
     if (!(m_ucsKF[iKF] & LBA_FLAG_FRAME_UPDATE_TRACK_INFORMATION)) {
       continue;
@@ -2593,12 +2630,13 @@ void LocalBundleAdjustor::SolveBackSubstitution() {
     if (Nx == 0) {
       continue;
     }
-    m_ucsKF[iKF] |= LBA_FLAG_FRAME_UPDATE_BACK_SUBSTITUTION;
     ubyte *uds = m_uds.data() + m_iKF2d[iKF];
     for (int ix = 0; ix < Nx; ++ix) {
-      if (uds[ix] & LBA_FLAG_TRACK_UPDATE_INFORMATION) {
-        uds[ix] |= LBA_FLAG_TRACK_UPDATE_BACK_SUBSTITUTION;
+      if (!(uds[ix] & LBA_FLAG_TRACK_UPDATE_INFORMATION)) {
+        continue;
       }
+      uds[ix] |= LBA_FLAG_TRACK_UPDATE_BACK_SUBSTITUTION;
+      m_ucsKF[iKF] |= LBA_FLAG_FRAME_UPDATE_BACK_SUBSTITUTION;
     }
   }
   const int Nc = static_cast<int>(m_LFs.size());
@@ -2614,6 +2652,9 @@ void LocalBundleAdjustor::SolveBackSubstitution() {
     const int NZ = int(LF.m_Zs.size());
     for (int iZ = 0; iZ < NZ; ++iZ) {
       const FRM::Measurement &Z = LF.m_Zs[iZ];
+      if (Z.m_iz1 == Z.m_iz2) {
+        continue;
+      }
       m_ucsKF[Z.m_iKF] |= LBA_FLAG_FRAME_UPDATE_BACK_SUBSTITUTION;
       ubyte *uds = m_uds.data() + m_iKF2d[Z.m_iKF];
       for (int iz = Z.m_iz1; iz < Z.m_iz2; ++iz) {
@@ -2629,7 +2670,7 @@ void LocalBundleAdjustor::SolveBackSubstitution() {
       continue;
     }
     m_iKF2X[iKF] = iX;
-    iX += int(m_KFs[iKF].m_xs.size());
+    iX += static_cast<int>(m_KFs[iKF].m_xs.size());
   }
   m_xds.Resize(iX);
 
@@ -2706,11 +2747,28 @@ void LocalBundleAdjustor::SolveBackSubstitution() {
     for (int ix = 0; ix < Nx; ++ix) {
       uds[ix] &= ~LBA_FLAG_TRACK_UPDATE_INFORMATION;
     }
-    const int NST = int(KF.m_STs.size());
+    const int NST = static_cast<int>(KF.m_STs.size());
     for (int iST = 0; iST < NST; ++iST) {
       KF.m_usST[iST] &= ~LBA_FLAG_TRACK_UPDATE_INFORMATION;
     }
   }
+#ifdef LBA_DEBUG_GROUND_TRUTH_STATE
+  if (m_dsGT) {
+    for (int iKF = 0; iKF < nKFs; ++iKF) {
+      const int iX = m_iKF2X[iKF];
+      if (iX == -1) {
+        continue;
+      }
+      float *xds = m_xds.Data() + iX;
+      const int id = m_iKF2d[iKF];
+      const Depth::InverseGaussian *ds = m_ds.data() + id, *dsGT = m_dsGT->data() + id;
+      const int Nx = static_cast<int>(m_KFs[iKF].m_xs.size());
+      for (int ix = 0; ix < Nx; ++ix) {
+        xds[ix] = dsGT[ix].u() - ds[ix].u();
+      }
+    }
+  }
+#endif
   PushDepthUpdates(m_xds, &m_xsGN);
   m_x2GN = m_xsGN.SquaredLength();
 //#ifdef CFG_DEBUG
@@ -2828,11 +2886,13 @@ bool LocalBundleAdjustor::EmbeddedMotionIteration() {
   ai.Bind(x.BindNext(), Nmc);
 
   LA::AlignedVector6f xc[2];
+  LA::AlignedMatrix9x9f Amm;
   LA::AlignedMatrix9x6f Amc;
   for (int ic1 = -1, ic2 = 0, imp1 = -pm, imp2 = 0, r = 0; ic2 < Nc;
        ic1 = ic2++, imp1 = imp2, imp2 += pm, r = 1 - r) {
     const Camera::Factor &_A = m_SAcmsLF[m_ic2LF[ic2]];
-    A.SetBlock(imp2, 0, _A.m_Au.m_Amm.m_A);
+    Amm.Set(_A.m_Au.m_Amm.m_A);
+    A.SetBlock(imp2, 0, Amm);
     float *_b = b.Data() + imp2;
     _A.m_Au.m_Amm.m_b.Get(_b);
     xc[r].Set(xcs[ic2]);
@@ -2917,6 +2977,76 @@ void LocalBundleAdjustor::EmbeddedPointIteration(const AlignedVector<Camera> &Cs
                                                  const std::vector<ubyte> &ucsKF,
                                                  const std::vector<ubyte> &uds,
                                                  std::vector<Depth::InverseGaussian> *ds) {
+                                                   
+//#ifdef CFG_DEBUG
+#if 0
+  {
+    const int iKF = 37;
+    const int ix = 21;
+    LA::Vector3f Rx;
+    LA::SymmetricMatrix2x2f W;
+    const KeyFrame &KF = m_KFs[iKF];
+    const FTR::Source &x = KF.m_xs[ix];
+    m_zds.resize(0);
+#ifdef CFG_STEREO
+    if (x.m_xr.Valid()) {
+      Rx.Set(x.m_x.x(), x.m_x.y(), 1.0f);
+      //const float w = 1.0f;
+      const float w = KF.m_Ards[ix].m_wx * 1.0e-2f / BA_WEIGHT_FEATURE;
+      UT::Print("[%d] %e\n", KF.m_T.m_iFrm, w);
+      x.m_Wr.GetScaled(w, W);
+      m_zds.push_back(Depth::Measurement(m_K.m_br, Rx, x.m_xr, W));
+    }
+#endif
+    const int nKFs = static_cast<int>(m_KFs.size()), nLFs = static_cast<int>(m_LFs.size());
+    const int Nc = nKFs + nLFs;
+#ifdef CFG_STEREO
+    m_t12s.Resize(Nc << 1);
+#else
+    m_t12s.Resize(Nc);
+#endif
+    for (int ic = 0; ic < Nc; ++ic) {
+      const FRM::Frame *F = ic < nKFs ? (FRM::Frame *) &m_KFs[ic] : &m_LFs[ic - nKFs];
+      const KeyFrame *KF = ic < nKFs ? (KeyFrame *) F : NULL;
+      const LocalFrame *LF = KF ? NULL : (LocalFrame *) F;
+      const int iz = F->SearchFeatureMeasurement(iKF, ix);
+      if (iz == -1) {
+        continue;
+      }
+      const Rigid3D T = (ic < nKFs ? m_CsKF[ic] : m_CsLF[ic - nKFs].m_T) / m_CsKF[iKF];
+      T.ApplyRotation(x.m_x, Rx);
+#ifdef CFG_STEREO
+      LA::AlignedVector3f *t = m_t12s.Data() + (ic << 1);
+#else
+      LA::AlignedVector3f *t = m_t12s.Data() + ic;
+#endif
+      T.GetTranslation(*t);
+      const FTR::Measurement &z = F->m_zs[iz];
+#ifdef CFG_STEREO
+      if (z.m_z.Valid()) {
+        //const float w = 1.0f;
+        const float w = (KF ? KF->m_Azs[iz].m_wx * 1.0e-2f : LF->m_Lzs[iz].m_wx) / BA_WEIGHT_FEATURE;
+        UT::Print("[%d] %e\n", F->m_T.m_iFrm, w);
+        z.m_W.GetScaled(w, W);
+        m_zds.push_back(Depth::Measurement(t[0], Rx, z.m_z, W));
+      }
+      if (z.m_zr.Valid()) {
+        LA::AlignedVector3f::apb(t[0], m_K.m_br, t[1]);
+        //const float w = 1.0f;
+        const float w = (KF ? KF->m_Azs[iz].m_wxr * 1.0e-2f : LF->m_Lzs[iz].m_wxr) / BA_WEIGHT_FEATURE;
+        UT::Print("[%d] %e\n", F->m_T.m_iFrm, w);
+        z.m_Wr.GetScaled(w, W);
+        m_zds.push_back(Depth::Measurement(t[1], Rx, z.m_zr, W));
+      }
+#else
+      z.m_W.GetScaled(KF ? KF->m_Azs[iz].m_wx : LF->m_Lzs[iz].m_wx, W);
+      m_zds.push_back(Depth::Measurement(*t, Rx, z.m_z, W));
+#endif
+    }
+    Depth::InverseGaussian d = m_ds[m_iKF2d[iKF] + ix];
+    Depth::Triangulate(1.0f, static_cast<int>(m_zds.size()), m_zds.data(), &d, &m_work, true);
+  }
+#endif
   std::vector<int> &iKF2X = m_idxsTmp1, &iX2d = m_idxsTmp2;
   const int nKFs = static_cast<int>(m_KFs.size());
   iKF2X.assign(nKFs, -1);
@@ -3000,7 +3130,7 @@ void LocalBundleAdjustor::EmbeddedPointIteration(const AlignedVector<Camera> &Cs
   m_t12s.Resize(Nt);
 #endif
   id2z[0] = 0;
-  for (int id = 0, iz = 0; id < Nd; ++id) {
+  for (int id = 0; id < Nd; ++id) {
 //#ifdef CFG_DEBUG
 #if 0
     UT_ASSERT(Nzs[id] > 0);
@@ -3010,7 +3140,7 @@ void LocalBundleAdjustor::EmbeddedPointIteration(const AlignedVector<Camera> &Cs
   m_zds.resize(id2z[Nd]);
 
   LA::Vector3f Rx;
-  LA::SymmetricMatrix2x2f W;
+  //LA::SymmetricMatrix2x2f W;
   Nt = 0;
   memset(Nzs, 0, sizeof(int) * Nd);
   for (int ic = 0; ic < Nc; ++ic) {
@@ -3030,9 +3160,10 @@ void LocalBundleAdjustor::EmbeddedPointIteration(const AlignedVector<Camera> &Cs
             continue;
           }
           Rx.Set(x.m_x.x(), x.m_x.y(), 1.0f);
-          x.m_Wr.GetScaled(KF->m_Ards[ix].m_wx, W);
-          const int iz = id2z[id] + Nzs[id]++;
-          m_zds[iz].Set(m_K.m_br, Rx, x.m_xr, W);
+          //x.m_Wr.GetScaled(KF->m_Ards[ix].m_wx, W);
+          const LA::SymmetricMatrix2x2f &W = x.m_Wr;
+          const int i = id2z[id] + Nzs[id]++;
+          m_zds[i].Set(m_K.m_br, Rx, x.m_xr, W);
         }
       }
     }
@@ -3070,19 +3201,22 @@ void LocalBundleAdjustor::EmbeddedPointIteration(const AlignedVector<Camera> &Cs
         T.ApplyRotation(_KF.m_xs[z.m_ix].m_x, Rx);
 #ifdef CFG_STEREO
         if (z.m_z.Valid()) {
-          z.m_W.GetScaled(KF ? KF->m_Azs[iz].m_wx : LF->m_Lzs[iz].m_wx, W);
-          const int iz = id2z[id] + Nzs[id]++;
-          m_zds[iz].Set(t[0], Rx, z.m_z, W);
+          //z.m_W.GetScaled(KF ? KF->m_Azs[iz].m_wx : LF->m_Lzs[iz].m_wx, W);
+          const LA::SymmetricMatrix2x2f &W = z.m_W;
+          const int i = id2z[id] + Nzs[id]++;
+          m_zds[i].Set(t[0], Rx, z.m_z, W);
         }
         if (z.m_zr.Valid()) {
-          z.m_Wr.GetScaled(KF ? KF->m_Azs[iz].m_wxr : LF->m_Lzs[iz].m_wxr, W);
-          const int iz = id2z[id] + Nzs[id]++;
-          m_zds[iz].Set(t[1], Rx, z.m_zr, W);
+          //z.m_Wr.GetScaled(KF ? KF->m_Azs[iz].m_wxr : LF->m_Lzs[iz].m_wxr, W);
+          const LA::SymmetricMatrix2x2f &W = z.m_Wr;
+          const int i = id2z[id] + Nzs[id]++;
+          m_zds[i].Set(t[1], Rx, z.m_zr, W);
         }
 #else
-        z.m_W.GetScaled(KF ? KF->m_Azs[iz].m_wx : LF->m_Lzs[iz].m_wx, W);
-        const int iz = ++Nzs[id];
-        m_zds[iz].Set(*t, Rx, z.m_z, W);
+        //z.m_W.GetScaled(KF ? KF->m_Azs[iz].m_wx : LF->m_Lzs[iz].m_wx, W);
+        const LA::SymmetricMatrix2x2f &W = z.m_W;
+        const int i = ++Nzs[id];
+        m_zds[i].Set(*t, Rx, z.m_z, W);
 #endif
       }
     }
@@ -3104,7 +3238,7 @@ void LocalBundleAdjustor::EmbeddedPointIteration(const AlignedVector<Camera> &Cs
       }
       Depth::InverseGaussian &d = _ds[ix];
       const Depth::InverseGaussian dBkp = d;
-      if (!Depth::Triangulate(BA_WEIGHT_FEATURE, Nzs[id], m_zds.data() + id2z[id], &d, &m_work)) {
+      if (!Depth::Triangulate(BA_WEIGHT_FEATURE, Nzs[id], m_zds.data() + id2z[id], &d, &m_work, true)) {
         d = dBkp;
       }
     }

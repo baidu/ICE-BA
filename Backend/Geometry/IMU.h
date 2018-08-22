@@ -36,6 +36,15 @@ class Measurement {
     a.xyzr() = (u1.m_a.xyzr() * w1) + (u2.m_a.xyzr() * w2);
     w.xyzr() = (u1.m_w.xyzr() * w1) + (u2.m_w.xyzr() * w2);
   }
+  inline void Print(const bool e = false) const {
+    if (e) {
+      UT::Print("%e  %e %e %e  %e %e %e\n", t(), m_a.x(), m_a.y(), m_a.z(),
+                                                 m_w.x(), m_w.y(), m_w.z());
+    } else {
+      UT::Print("%f  %f %f %f  %f %f %f\n", t(), m_a.x(), m_a.y(), m_a.z(),
+                                                 m_w.x(), m_w.y(), m_w.z());
+    }
+  }
  public:
   LA::AlignedVector3f m_a, m_w;
 };
@@ -426,6 +435,9 @@ class Delta {
 
   class Error {
    public:
+    inline bool Valid() const { return m_er.Valid(); }
+    inline bool Invalid() const { return m_er.Invalid(); }
+    inline void Invalidate() { m_er.Invalidate(); }
     inline void Print(const bool e = false, const bool l = false) const {
       UT::PrintSeparator();
       m_er.Print(" er = ", e, l, true);
@@ -551,8 +563,8 @@ class Delta {
                  const float Tpv);
         inline void Get(Unitary *A11, Unitary *A22, Camera::Factor::Binary *A12) const {
 #ifdef CFG_IMU_FULL_COVARIANCE
-          const LA::AlignedMatrix3x3f *A[10] = {&m_A[ 0], &m_A[ 9], &m_A[17], &m_A[24], &m_A[30],
-                                                &m_A[35], &m_A[39], &m_A[42], &m_A[44], &m_A[45]};
+          //const LA::AlignedMatrix3x3f *A[10] = {&m_A[ 0], &m_A[ 9], &m_A[17], &m_A[24], &m_A[30],
+          //                                      &m_A[35], &m_A[39], &m_A[42], &m_A[44], &m_A[45]};
           A11->Set(m_A, m_A + 9, m_A + 17, m_A + 24, m_A + 30, m_b);
           A22->Set(m_A + 40, m_A + 44, m_A + 47, m_A + 49, m_A + 50, m_b + 5);
           A12->Set(m_A + 5, m_A + 14, m_A + 22, m_A + 29, m_A + 35);
@@ -640,7 +652,7 @@ class Delta {
         LA::AlignedVector3f m_bc[8];
         LA::AlignedMatrix2x3f m_JTWg[5];
         LA::SymmetricMatrix2x2f m_Agg;
-        LA::AlignedMatrix2x3f m_Agc[10];
+        LA::AlignedMatrix2x3f m_Agc[8];
         LA::Vector2f m_bg;
 #else
         LA::AlignedMatrix3x3f m_JTWbw1r, m_JTWr2r;
@@ -746,25 +758,27 @@ class Delta {
   inline Rotation3D GetRotationState(const Camera &C1, const Camera &C2) const {
     return Rotation3D(C1.m_T) / C2.m_T;
   }
-  inline Rotation3D GetRotationMeasurement(const Camera &C1) const {
-    return m_RT / Rotation3D(m_Jrbw * (C1.m_bw - m_bw));
+  inline Rotation3D GetRotationMeasurement(const Camera &C1, const float eps) const {
+    return m_RT / Rotation3D(m_Jrbw * (C1.m_bw - m_bw), eps);
   }
-  inline Rotation3D GetRotationMeasurement(const LA::AlignedVector3f &dbw) const {
-    return m_RT / Rotation3D(m_Jrbw * dbw);
+  inline Rotation3D GetRotationMeasurement(const LA::AlignedVector3f &dbw, const float eps) const {
+    return m_RT / Rotation3D(m_Jrbw * dbw, eps);
   }
-  inline LA::AlignedVector3f GetRotationError(const Camera &C1, const Camera &C2) const {
-    const Rotation3D eR = GetRotationMeasurement(C1) / GetRotationState(C1, C2);
-    return eR.GetRodrigues();
+  inline LA::AlignedVector3f GetRotationError(const Camera &C1, const Camera &C2,
+                                              const float eps) const {
+    const Rotation3D eR = GetRotationMeasurement(C1, eps) / GetRotationState(C1, C2);
+    return eR.GetRodrigues(eps);
   }
 #else
   inline Rotation3D GetRotationState(const Camera &C1, const Camera &C2) const {
     return Rotation3D(C2.m_T) / C1.m_T;
   }
-  inline Rotation3D GetRotationMeasurement(const Camera &C1) const {
-    return Rotation3D(m_Jrbw * (C1.m_bw - m_bw)) / m_RT;
+  inline Rotation3D GetRotationMeasurement(const Camera &C1, const float eps) const {
+    return Rotation3D(m_Jrbw * (C1.m_bw - m_bw), eps) / m_RT;
   }
-  inline LA::AlignedVector3f GetRotationError(const Camera &C1, const Camera &C2) const {
-    const Rotation3D eR = GetRotationState(C1, C2) / GetRotationMeasurement(C1);
+  inline LA::AlignedVector3f GetRotationError(const Camera &C1, const Camera &C2,
+                                              const float eps) const {
+    const Rotation3D eR = GetRotationState(C1, C2) / GetRotationMeasurement(C1, eps);
     return eR.GetRodrigues();
   }
 #endif
@@ -803,24 +817,26 @@ class Delta {
   }
   
 #ifdef CFG_DEBUG
-  inline void DebugSetMeasurement(const Camera &C1, const Camera &C2, const Point3D &pu) {
+  inline void DebugSetMeasurement(const Camera &C1, const Camera &C2, const Point3D &pu, const float eps) {
     const LA::AlignedVector3f dba = C1.m_ba - m_ba;
     const LA::AlignedVector3f dbw = C1.m_bw - m_bw;
-    m_RT = GetRotationState(C1, C2) * Rotation3D(m_Jrbw * dbw);
+    m_RT = GetRotationState(C1, C2) * Rotation3D(m_Jrbw * dbw, eps);
     m_v = GetVelocityState(C1, C2) - (m_Jvba * dba + m_Jvbw * dbw);
     m_p = GetPositionState(C1, C2, pu) - (m_Jpba * dba + m_Jpbw * dbw);
   }
 #endif
-  inline void GetError(const Camera &C1, const Camera &C2, const Point3D &pu, Error &e) const {
-    e.m_er = GetRotationError(C1, C2);
+  inline void GetError(const Camera &C1, const Camera &C2, const Point3D &pu, Error &e,
+                       const float eps) const {
+    e.m_er = GetRotationError(C1, C2, eps);
     e.m_ev = GetVelocityError(C1, C2);
     e.m_ep = GetPositionError(C1, C2, pu);
     e.m_eba = C1.m_ba - C2.m_ba;
     e.m_ebw = C1.m_bw - C2.m_bw;
   }
-  inline Error GetError(const Camera &C1, const Camera &C2, const Point3D &pu) const {
+  inline Error GetError(const Camera &C1, const Camera &C2, const Point3D &pu,
+                        const float eps) const {
     Error e;
-    GetError(C1, C2, pu, e);
+    GetError(C1, C2, pu, e, eps);
     return e;
   }
   static inline void GetError(const ErrorJacobian &Je, const LA::AlignedVector3f *xp1,
@@ -886,15 +902,93 @@ class Delta {
       e.m_ebw -= *xbw2;
     }
   }
+  inline void GetError(const Jacobian::RelativeLF &J, const LA::Vector2f &xg,
+                       const LA::AlignedVector3f &xp1, const LA::AlignedVector3f &xr1,
+                       const LA::AlignedVector3f &xv1, const LA::AlignedVector3f &xba1,
+                       const LA::AlignedVector3f &xbw1, const LA::AlignedVector3f &xp2,
+                       const LA::AlignedVector3f &xr2, const LA::AlignedVector3f &xv2,
+                       const LA::AlignedVector3f &xba2, const LA::AlignedVector3f &xbw2,
+                       Error &e) const {
+    GetError(J, xg, xp1, xr1, xv1, xba1, xbw1, xp2, xr2, xv2, xba2, xbw2, m_Tpv, e);
+  }
+  static inline void GetError(const Jacobian::RelativeLF &J, const LA::Vector2f &xg,
+                              const LA::AlignedVector3f &xp1, const LA::AlignedVector3f &xr1,
+                              const LA::AlignedVector3f &xv1, const LA::AlignedVector3f &xba1,
+                              const LA::AlignedVector3f &xbw1, const LA::AlignedVector3f &xp2,
+                              const LA::AlignedVector3f &xr2, const LA::AlignedVector3f &xv2,
+                              const LA::AlignedVector3f &xba2, const LA::AlignedVector3f &xbw2,
+                              const float Tpv, Error &e) {
+    const LA::AlignedVector3f dxr = xr1 - xr2;
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jrr1, dxr, (float *) &e.m_er);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jrbw1, xbw1, (float *) &e.m_er);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jvr1, xr1, (float *) &e.m_ev);
+    //LA::AlignedMatrix3x3f::AddAbTo(J.m_Jvv1, xv1, (float *) &e.m_ev);
+    e.m_ev -= xv1;
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jvba1, xba1, (float *) &e.m_ev);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jvbw1, xbw1, (float *) &e.m_ev);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jvr2, xr2, (float *) &e.m_ev);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jvv2, xv2, (float *) &e.m_ev);
+    LA::AlignedMatrix2x3f::AddATbTo(J.m_JvgT, xg, e.m_ev);
+    const LA::AlignedVector3f dxp = xp1 - xp2;
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jpp1, dxp, (float *) &e.m_ep);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jpr1, xr1, (float *) &e.m_ep);
+    //LA::AlignedMatrix3x3f::AddAbTo(J.m_Jpv1, xv1, e.m_ep);
+    e.m_ep -= (xv1 * Tpv);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jpba1, xba1, (float *) &e.m_ep);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jpbw1, xbw1, (float *) &e.m_ep);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jpr2, xr2, (float *) &e.m_ep);
+    LA::AlignedMatrix2x3f::AddATbTo(J.m_JpgT, xg, e.m_ep);
+    e.m_eba += xba1;
+    e.m_eba -= xba2;
+    e.m_ebw += xbw1;
+    e.m_ebw -= xbw2;
+  }
+  inline void GetError(const Jacobian::RelativeKF &J, const LA::Vector2f &xg,
+                       const LA::AlignedVector3f &xv1, const LA::AlignedVector3f &xba1,
+                       const LA::AlignedVector3f &xbw1, const LA::AlignedVector3f &xp2,
+                       const LA::AlignedVector3f &xr2, const LA::AlignedVector3f &xv2,
+                       const LA::AlignedVector3f &xba2, const LA::AlignedVector3f &xbw2,
+                       Error &e) const {
+    GetError(J, xg, xv1, xba1, xbw1, xp2, xr2, xv2, xba2, xbw2, m_Tpv, e);
+  }
+
+  static inline void GetError(const Jacobian::RelativeKF &J, const LA::Vector2f &xg,
+                              const LA::AlignedVector3f &xv1, const LA::AlignedVector3f &xba1,
+                              const LA::AlignedVector3f &xbw1, const LA::AlignedVector3f &xp2,
+                              const LA::AlignedVector3f &xr2, const LA::AlignedVector3f &xv2,
+                              const LA::AlignedVector3f &xba2, const LA::AlignedVector3f &xbw2,
+                              const float Tpv, Error &e) {
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jrbw1, xbw1, (float *) &e.m_er);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jrr2, xr2, (float *) &e.m_er);
+    //LA::AlignedMatrix3x3f::AddAbTo(J.m_Jvv1, xv1, (float *) &e.m_ev);
+    e.m_ev -= xv1;
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jvba1, xba1, (float *) &e.m_ev);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jvbw1, xbw1, (float *) &e.m_ev);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jvr2, xr2, (float *) &e.m_ev);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jvv2, xv2, (float *) &e.m_ev);
+    LA::AlignedMatrix2x3f::AddATbTo(J.m_JvgT, xg, e.m_ev);
+    //LA::AlignedMatrix3x3f::AddAbTo(J.m_Jpv1, xv1, e.m_ep);
+    e.m_ep -= (xv1 * Tpv);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jpba1, xba1, (float *) &e.m_ep);
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jpbw1, xbw1, (float *) &e.m_ep);
+    //LA::AlignedMatrix3x3f::AddAbTo(J.m_Jpp2, xp2, (float *) &e.m_ep);
+    e.m_ep += xp2;
+    LA::AlignedMatrix3x3f::AddAbTo(J.m_Jpr2, xr2, (float *) &e.m_ep);
+    LA::AlignedMatrix2x3f::AddATbTo(J.m_JpgT, xg, e.m_ep);
+    e.m_eba += xba1;
+    e.m_eba -= xba2;
+    e.m_ebw += xbw1;
+    e.m_ebw -= xbw2;
+  }
   inline void GetErrorJacobian(const Camera &C1, const Camera &C2, const Point3D &pu,
-                               Error *e, Jacobian::Global *J) const {
+                               Error *e, Jacobian::Global *J, const float eps) const {
 #ifdef CFG_IMU_FULL_COVARIANCE
     const Rotation3D dR = GetRotationState(C1, C2);
     const LA::AlignedVector3f drbw = m_Jrbw * (C1.m_bw - m_bw);
-    const Rotation3D eR = m_RT / Rotation3D(drbw) / dR;
-    eR.GetRodrigues(e->m_er);
-    Rotation3D::GetRodriguesJacobianInverse(e->m_er, J->m_Jrr1);
-    Rotation3D::GetRodriguesJacobian(drbw.GetMinus(), J->m_Jrbw1);
+    const Rotation3D eR = m_RT / Rotation3D(drbw, eps) / dR;
+    eR.GetRodrigues(e->m_er, eps);
+    Rotation3D::GetRodriguesJacobianInverse(e->m_er, J->m_Jrr1, eps);
+    Rotation3D::GetRodriguesJacobian(drbw.GetMinus(), J->m_Jrbw1, eps);
     J->m_Jrr1.MakeMinus();
     J->m_Jrbw1 = J->m_Jrr1 * m_RT * J->m_Jrbw1 * m_Jrbw;
     J->m_Jrr1 = J->m_Jrr1 * eR * C1.m_T;
@@ -902,9 +996,9 @@ class Delta {
     const Rotation3D dR = GetRotationState(C1, C2);
     const LA::AlignedVector3f drbw = m_Jrbw * (C1.m_bw - m_bw);
     const Rotation3D eR = dR * m_RT, eRub = eR / Rotation3D(drbw);
-    eRub.GetRodrigues(e->m_er);
-    Rotation3D::GetRodriguesJacobianInverse(e->m_er, J->m_Jrr1);
-    Rotation3D::GetRodriguesJacobian(drbw.GetMinus(), J->m_Jrbw1);
+    eRub.GetRodrigues(e->m_er, eps);
+    Rotation3D::GetRodriguesJacobianInverse(e->m_er, J->m_Jrr1, eps);
+    Rotation3D::GetRodriguesJacobian(drbw.GetMinus(), J->m_Jrbw1, eps);
     J->m_Jrr1.MakeMinus();
     J->m_Jrbw1 = J->m_Jrr1 * eR * J->m_Jrbw1 * m_Jrbw;
     J->m_Jrr1 = J->m_Jrr1 * C2.m_T;
@@ -947,14 +1041,15 @@ class Delta {
     //J->m_Jpr2.MakeZero();
   }
   inline void GetErrorJacobian(const Camera &C1, const Camera &C2, const Point3D &pu,
-                               const Rotation3D &Rg, Error *e, Jacobian::RelativeLF *J) const {
+                               const Rotation3D &Rg, Error *e, Jacobian::RelativeLF *J,
+                               const float eps) const {
 #ifdef CFG_IMU_FULL_COVARIANCE
     const Rotation3D dR = GetRotationState(C1, C2);
     const LA::AlignedVector3f drbw = m_Jrbw * (C1.m_bw - m_bw);
-    const Rotation3D eR = m_RT / Rotation3D(drbw) / dR;
-    eR.GetRodrigues(e->m_er);
-    Rotation3D::GetRodriguesJacobianInverse(e->m_er, J->m_Jrr1);
-    Rotation3D::GetRodriguesJacobian(drbw.GetMinus(), J->m_Jrbw1);
+    const Rotation3D eR = m_RT / Rotation3D(drbw, eps) / dR;
+    eR.GetRodrigues(e->m_er, eps);
+    Rotation3D::GetRodriguesJacobianInverse(e->m_er, J->m_Jrr1, eps);
+    Rotation3D::GetRodriguesJacobian(drbw.GetMinus(), J->m_Jrbw1, eps);
     J->m_Jrr1.MakeMinus();
     J->m_Jrbw1 = J->m_Jrr1 * m_RT * J->m_Jrbw1 * m_Jrbw;
     J->m_Jrr1 = J->m_Jrr1 * eR;
@@ -963,10 +1058,10 @@ class Delta {
 #else
     const Rotation3D dR = GetRotationState(C1, C2);
     const LA::AlignedVector3f drbw = m_Jrbw * (C1.m_bw - m_bw);
-    const Rotation3D eR = dR * m_RT, eRub = eR / Rotation3D(drbw);
-    eRub.GetRodrigues(e->m_er);
-    Rotation3D::GetRodriguesJacobianInverse(e->m_er, J->m_Jrr1);
-    Rotation3D::GetRodriguesJacobian(drbw.GetMinus(), J->m_Jrbw1);
+    const Rotation3D eR = dR * m_RT, eRub = eR / Rotation3D(drbw, eps);
+    eRub.GetRodrigues(e->m_er, eps);
+    Rotation3D::GetRodriguesJacobianInverse(e->m_er, J->m_Jrr1, eps);
+    Rotation3D::GetRodriguesJacobian(drbw.GetMinus(), J->m_Jrbw1, eps);
     J->m_Jrr1.MakeMinus();
     J->m_Jrbw1 = J->m_Jrr1 * eR * J->m_Jrbw1 * m_Jrbw;
     const Rotation3D R2T = Rg / C2.m_T;
@@ -980,7 +1075,8 @@ class Delta {
     dR.LA::AlignedMatrix3x3f::GetTranspose(J->m_Jvv2);
 #endif
     LA::AlignedMatrix3x3f::Ab(J->m_Jvv2, pu, (float *) &e->m_ep);
-    const Rotation3D R1 = Rotation3D(C1.m_T) / Rg;
+    //const Rotation3D R1 = Rotation3D(C1.m_T) / Rg;
+    const Rotation3D R1 = R1T.GetTranspose();
     SkewSymmetricMatrix::ATB(e->m_ev, R1, J->m_Jvr2);
     SkewSymmetricMatrix::ATB(e->m_ep, R1, J->m_Jpr2);
     if (IMU_GRAVITY_EXCLUDED) {
@@ -1023,24 +1119,24 @@ class Delta {
     e->m_ebw = C1.m_bw - C2.m_bw;
   }
   inline void GetErrorJacobian(const Camera &C1, const Camera &C2, const Point3D &pu,
-                               Error *e, Jacobian::RelativeKF *J) const {
+                               Error *e, Jacobian::RelativeKF *J, const float eps) const {
 #ifdef CFG_IMU_FULL_COVARIANCE
     const Rotation3D dR = GetRotationState(C1, C2);
     const LA::AlignedVector3f drbw = m_Jrbw * (C1.m_bw - m_bw);
-    const Rotation3D eR = m_RT / Rotation3D(drbw) / dR;
-    eR.GetRodrigues(e->m_er);
-    Rotation3D::GetRodriguesJacobianInverse(e->m_er, J->m_Jrr2);
-    Rotation3D::GetRodriguesJacobian(drbw.GetMinus(), J->m_Jrbw1);
+    const Rotation3D eR = m_RT / Rotation3D(drbw, eps) / dR;
+    eR.GetRodrigues(e->m_er, eps);
+    Rotation3D::GetRodriguesJacobianInverse(e->m_er, J->m_Jrr2, eps);
+    Rotation3D::GetRodriguesJacobian(drbw.GetMinus(), J->m_Jrbw1, eps);
     J->m_Jrbw1 = J->m_Jrr2 * m_RT * J->m_Jrbw1 * m_Jrbw;
     J->m_Jrbw1.MakeMinus();
     J->m_Jrr2 = J->m_Jrr2 * eR;
 #else
     const Rotation3D dR = GetRotationState(C1, C2);
     const LA::AlignedVector3f drbw = m_Jrbw * (C1.m_bw - m_bw);
-    const Rotation3D eR = dR * m_RT, eRub = eR / Rotation3D(drbw);
-    eRub.GetRodrigues(e->m_er);
-    Rotation3D::GetRodriguesJacobianInverse(e->m_er, J->m_Jrr2);
-    Rotation3D::GetRodriguesJacobian(drbw.GetMinus(), J->m_Jrbw1);
+    const Rotation3D eR = dR * m_RT, eRub = eR / Rotation3D(drbw, eps);
+    eRub.GetRodrigues(e->m_er, eps);
+    Rotation3D::GetRodriguesJacobianInverse(e->m_er, J->m_Jrr2, eps);
+    Rotation3D::GetRodriguesJacobian(drbw.GetMinus(), J->m_Jrbw1, eps);
     J->m_Jrbw1 = J->m_Jrr2 * eR * J->m_Jrbw1 * m_Jrbw;
     J->m_Jrbw1.MakeMinus();
     const Rotation3D R2T = Rotation3D(C1.m_T) / C2.m_T;
@@ -1095,31 +1191,36 @@ class Delta {
     e->m_ebw = C1.m_bw - C2.m_bw;
   }
   inline void GetFactor(const float w, const Camera &C1, const Camera &C2, const Point3D &pu,
-                        Factor *A, Camera::Factor::Binary *A12, Factor::Auxiliary::Global *U) const {
-    GetErrorJacobian(C1, C2, pu, &A->m_Je.m_e, &A->m_Je.m_J);
+                        Factor *A, Camera::Factor::Binary *A12, Factor::Auxiliary::Global *U,
+                        const float eps) const {
+    GetErrorJacobian(C1, C2, pu, &A->m_Je.m_e, &A->m_Je.m_J, eps);
     A->m_F = GetCost(w, A->m_Je.m_e);
     U->Set(A->m_Je.m_J, A->m_Je.m_e, w, m_W, m_Tpv);
     U->Get(&A->m_A11, &A->m_A22, A12);
   }
   inline void GetFactor(const float w, const Camera &C1, const Camera &C2, const Point3D &pu,
                         const Rotation3D &Rg, Error *e, Jacobian::RelativeLF *J,
-                        Factor::Auxiliary::RelativeLF *U) const {
-    GetErrorJacobian(C1, C2, pu, Rg, e, J);
+                        Factor::Auxiliary::RelativeLF *U, const float eps) const {
+    GetErrorJacobian(C1, C2, pu, Rg, e, J, eps);
     U->Set(*J, *e, w, m_W, m_Tpv);
   }
   inline void GetFactor(const float w, const Camera &C1, const Camera &C2, const Point3D &pu,
-                        Error *e, Jacobian::RelativeKF *J, Factor::Auxiliary::RelativeKF *U) const {
-    GetErrorJacobian(C1, C2, pu, e, J);
+                        Error *e, Jacobian::RelativeKF *J, Factor::Auxiliary::RelativeKF *U,
+                        const float eps) const {
+    GetErrorJacobian(C1, C2, pu, e, J, eps);
     U->Set(*J, *e, w, m_W, m_Tpv);
   }
   inline float GetCost(const float w, const Error &e) const {
+    return GetCost(w, m_W, e);
+  }
+  static inline float GetCost(const float w, const Weight &W, const Error &e) {
 #ifdef CFG_IMU_FULL_COVARIANCE
     LA::AlignedVector3f We;
     float F = 0.0f;
     const LA::AlignedVector3f *_e = (LA::AlignedVector3f *) &e;
     for (int i = 0; i < 5; ++i) {
       We.MakeZero();
-      const LA::AlignedMatrix3x3f *Wi = m_W[i];
+      const LA::AlignedMatrix3x3f *Wi = W[i];
       for (int j = 0; j < 5; ++j) {
         LA::AlignedMatrix3x3f::AddAbTo(Wi[j], _e[j], (float *) &We);
       }
@@ -1127,11 +1228,11 @@ class Delta {
     }
     return w * F;
 #else
-    return w * (LA::SymmetricMatrix3x3f::MahalanobisDistance(m_W.m_Wr, e.m_er) +
-                LA::SymmetricMatrix3x3f::MahalanobisDistance(m_W.m_Wv, e.m_ev) +
-                LA::SymmetricMatrix3x3f::MahalanobisDistance(m_W.m_Wp, e.m_ep) +
-                m_W.m_wba * e.m_eba.SquaredLength() +
-                m_W.m_wbw * e.m_ebw.SquaredLength());
+    return w * (LA::SymmetricMatrix3x3f::MahalanobisDistance(W.m_Wr, e.m_er) +
+                LA::SymmetricMatrix3x3f::MahalanobisDistance(W.m_Wv, e.m_ev) +
+                LA::SymmetricMatrix3x3f::MahalanobisDistance(W.m_Wp, e.m_ep) +
+                W.m_wba * e.m_eba.SquaredLength() +
+                W.m_wbw * e.m_ebw.SquaredLength());
 #endif
   }
   inline float GetCost(const float w, const ErrorJacobian &Je, const LA::AlignedVector3f *xp1,
@@ -1149,8 +1250,9 @@ class Delta {
                            const LA::AlignedVector3f *xba1, const LA::AlignedVector3f *xbw1,
                            const LA::AlignedVector3f *xp2, const LA::AlignedVector3f *xr2, 
                            const LA::AlignedVector3f *xv2, const LA::AlignedVector3f *xba2,
-                           const LA::AlignedVector3f *xbw2, Reduction &Ra, Reduction &Rp) const {
-    GetError(C1, C2, pu, Ra.m_e);
+                           const LA::AlignedVector3f *xbw2, Reduction &Ra, Reduction &Rp,
+                           const float eps) const {
+    GetError(C1, C2, pu, Ra.m_e, eps);
     GetError(A.m_Je, xp1, xr1, xv1, xba1, xbw1, xp2, xr2, xv2, xba2, xbw2, Rp.m_e);
     Ra.m_dF = A.m_F - (Ra.m_F = GetCost(w, Ra.m_e));
     Rp.m_dF = A.m_F - (Rp.m_F = GetCost(w, Rp.m_e));
@@ -1174,6 +1276,24 @@ class Delta {
     scc = UT::AssertEqual(m_Tpv, D.m_Tpv, verbose, str + ".m_Tpv") && scc;
     scc = UT::AssertEqual(m_Tpg, D.m_Tpg, verbose, str + ".m_Tpg") && scc;
     return scc;
+  }
+  inline void Print(const bool e = false) const {
+    UT::PrintSeparator();
+    m_ba.Print("  ba = ", e, false, true);
+    m_bw.Print("  bw = ", e, false, true);
+    m_RT.Print("  RT = ", e);
+    m_v.Print("   v = ", e, false, true);
+    m_p.Print("   p = ", e, false, true);
+    m_Jrbw.Print("Jrbw = ", e);
+    m_Jvba.Print("Jvba = ", e);
+    m_Jvbw.Print("Jvbw = ", e);
+    m_Jpba.Print("Jpba = ", e);
+    m_Jpbw.Print("Jpbw = ", e);
+    if (e) {
+      UT::Print(" Tvg = %e\n", m_Tvg);
+    } else {
+      UT::Print(" Tvg = %f\n", m_Tvg);
+    }
   }
  public:
   Measurement m_u1, m_u2;
@@ -1982,17 +2102,19 @@ class Delta {
     };
   };
   void EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Point3D &pu,
-                             EigenError *e_e, EigenJacobian::Global *e_J) const;
+                             EigenError *e_e, EigenJacobian::Global *e_J, const float eps) const;
   void EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Point3D &pu,
-                             const Rotation3D &Rg, EigenError *e_e, EigenJacobian::RelativeLF *e_J) const;
+                             const Rotation3D &Rg, EigenError *e_e, EigenJacobian::RelativeLF *e_J,
+                             const float eps) const;
   void EigenGetErrorJacobian(const Camera &C1, const Camera &C2, const Point3D &pu,
-                             EigenError *e_e, EigenJacobian::RelativeKF *e_J) const;
+                             EigenError *e_e, EigenJacobian::RelativeKF *e_J,
+                             const float eps) const;
   void EigenGetFactor(const float w, const Camera &C1, const Camera &C2, const Point3D &pu,
-                      EigenFactor::Global *e_A) const;
+                      EigenFactor::Global *e_A, const float eps) const;
   void EigenGetFactor(const float w, const Camera &C1, const Camera &C2, const Point3D &pu,
-                      const Rotation3D &Rg, EigenFactor::RelativeLF *e_A) const;
+                      const Rotation3D &Rg, EigenFactor::RelativeLF *e_A, const float eps) const;
   void EigenGetFactor(const float w, const Camera &C1, const Camera &C2, const Point3D &pu,
-                      EigenFactor::RelativeKF *e_A) const;
+                      EigenFactor::RelativeKF *e_A, const float eps) const;
   static void EigenGetFactor(const float w, const Weight &W, const EigenJacobian::Global &e_J,
                              const EigenError &e_e, EigenFactor::Global *e_A);
   static void EigenGetFactor(const float w, const Weight &W, const EigenJacobian::RelativeLF &e_J,
@@ -2000,15 +2122,22 @@ class Delta {
   static EigenError EigenGetError(const EigenErrorJacobian &e_Je, const EigenVector30f e_x);
   float EigenGetCost(const float w, const Camera &C1, const Camera &C2, const Point3D &pu,
                      const EigenVector6f &e_xc1, const EigenVector9f &e_xm1,
-                     const EigenVector6f &e_xc2, const EigenVector9f &e_xm2) const;
+                     const EigenVector6f &e_xc2, const EigenVector9f &e_xm2,
+                     const float eps) const;
 #endif
 };
 
 void InitializeCamera(const AlignedVector<Measurement> &us, Camera &C);
 void PreIntegrate(const AlignedVector<Measurement> &us, const float t1, const float t2,
-                  const Camera &C1, Delta *D, AlignedVector<float> *work, const bool jac = true,
-                  const Measurement *u1 = NULL, const Measurement *u2 = NULL);
-void Propagate(const Point3D &pu, const Delta &D, const Camera &C1, Camera &C2);
+                  const Camera &C1, Delta *D, AlignedVector<float> *work, const bool jac/* = true*/,
+                  const Measurement *u1/* = NULL*/, const Measurement *u2/* = NULL*/,
+                  const float eps);
+void PreIntegrate(const Measurement *us, const int N, const float t1, const float t2,
+                  const Camera &C1, Delta *D, AlignedVector<float> *work, const bool jac/* = true*/,
+                  const Measurement *u1/* = NULL*/, const Measurement *u2/* = NULL*/,
+                  const float eps);
+void Propagate(const Point3D &pu, const Delta &D, const Camera &C1, Camera &C2,
+               const float eps);
 
 };
 

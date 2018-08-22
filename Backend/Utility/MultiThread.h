@@ -45,26 +45,35 @@
 
 #define MT_TASK_NONE                      -1
 #define MT_TASK_LM_IBA_Reset              0
-#define MT_TASK_LM_IBA_PushCurrentFrame   1
-#define MT_TASK_LM_IBA_Synchronize        2
-#define MT_TASK_LM_LBA_Update             3
-#define MT_TASK_GM_LBA_Reset              4
-#define MT_TASK_GM_LBA_Push               5
-#define MT_TASK_GM_LBA_Synchronize        6
-#define MT_TASK_GM_GBA_Update             7
-#define MT_TASK_LBA_Reset                 8
-#define MT_TASK_LBA_PushCurrentFrame      9
-#define MT_TASK_LBA_GetCamera             10
-#define MT_TASK_LBA_SynchronizeData       11
-#define MT_TASK_LBA_UpdateData            12
-#define MT_TASK_LBA_BufferDataEmpty       13
-#define MT_TASK_GBA_Reset                 14
-#define MT_TASK_GBA_PushKeyFrame          15
-#define MT_TASK_GBA_UpdateCameras         16
-#define MT_TASK_GBA_PushCameraPriorPose   17
-#define MT_TASK_GBA_PushCameraPriorMotion 18
-#define MT_TASK_GBA_SynchronizeData       19
-#define MT_TASK_GBA_BufferDataEmpty       20
+#define MT_TASK_LM_IBA_PushLocalFrame     1
+#define MT_TASK_LM_IBA_PushKeyFrame       2
+#define MT_TASK_LM_IBA_DeleteKeyFrame     3
+#define MT_TASK_LM_IBA_Synchronize        4
+#define MT_TASK_LM_LBA_Update             5
+#define MT_TASK_GM_LBA_Reset              6
+#define MT_TASK_GM_LBA_PushKeyFrame       7
+#define MT_TASK_GM_LBA_DeleteKeyFrame     8
+#define MT_TASK_GM_LBA_Synchronize        9
+#define MT_TASK_GM_GBA_Update             10
+#define MT_TASK_LBA_Reset                 11
+#define MT_TASK_LBA_PushLocalFrame        12
+#define MT_TASK_LBA_PushKeyFrame          13
+#define MT_TASK_LBA_PushDeleteKeyFrame    14
+#define MT_TASK_LBA_PushDeleteMapPoints   15
+#define MT_TASK_LBA_PushUpdateCameras     16
+#define MT_TASK_LBA_GetCamera             17
+#define MT_TASK_LBA_SynchronizeData       18
+#define MT_TASK_LBA_UpdateData            19
+#define MT_TASK_LBA_BufferDataEmpty       20
+#define MT_TASK_GBA_Reset                 21
+#define MT_TASK_GBA_PushKeyFrame          22
+#define MT_TASK_GBA_PushDeleteKeyFrame    23
+#define MT_TASK_GBA_PushDeleteMapPoints   24
+#define MT_TASK_GBA_PushCameraPriorPose   25
+#define MT_TASK_GBA_PushCameraPriorMotion 26
+#define MT_TASK_GBA_PushUpdateCameras     27
+#define MT_TASK_GBA_SynchronizeData       28
+#define MT_TASK_GBA_BufferDataEmpty       29
 
 #include "Utility.h"
 #include <boost/thread/mutex.hpp>
@@ -136,6 +145,7 @@ class Thread {
       return;
     }
 #endif
+    Synchronize();
     MT_READ_LOCK_BEGIN(m_MT, MT_TASK_NONE, MT_TASK_NONE);
     if (m_stop == 2) {
       return;
@@ -156,7 +166,7 @@ class Thread {
 #endif
   }
 
-  virtual void WakeUp() {
+  virtual void WakeUp(const bool serial = false) {
 #ifdef CFG_SERIAL
     if (m_serial > 0) {
       if (++m_serialCnt == m_serial) {
@@ -169,6 +179,9 @@ class Thread {
     //printf("%s woke up\n", m_name.c_str());
     m_CDT.notify_one();
     //m_CDT.notify_all();
+    if (serial) {
+      Synchronize();
+    }
   }
 
   virtual void Run() = 0;
@@ -210,6 +223,7 @@ class Thread {
 #else
   void Spin() {
 #ifdef __ARM_NEON__
+#ifndef __APPLE__
     if (m_iCore >= -1) {
       cpu_set_t set;
       CPU_ZERO(&set);
@@ -219,6 +233,7 @@ class Thread {
       }
       UT::Print("Bound thread %s to CPU CORE: #%d", m_name.c_str(), m_iCore);
     }
+#endif
 #endif  // __ARM_NEON__
     //UT::Print("[%s] Run1\n", this->m_name.c_str());
     while (1) {

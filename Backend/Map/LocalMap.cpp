@@ -22,25 +22,23 @@
 void LocalMap::IBA_Reset() {
   MT_WRITE_LOCK_BEGIN(m_MT, MT_TASK_NONE, MT_TASK_LM_IBA_Reset);
   m_CsLF.resize(0);
-  m_CsKF.Resize(0);
+  m_CsKF.resize(0);
   m_ds.resize(0);
   m_iKF2d.assign(1, 0);
   m_Uc = LM_FLAG_FRAME_DEFAULT;
-  m_ucsKF.resize(0);
   m_uds.resize(0);
   MT_WRITE_LOCK_END(m_MT, MT_TASK_NONE, MT_TASK_LM_IBA_Reset);
 }
 
-void LocalMap::IBA_PushCurrentFrame(const CameraLF &C) {
-  MT_WRITE_LOCK_BEGIN(m_MT, C.m_iFrm, MT_TASK_LM_IBA_PushCurrentFrame);
+void LocalMap::IBA_PushLocalFrame(const CameraLF &C) {
+  MT_WRITE_LOCK_BEGIN(m_MT, C.m_iFrm, MT_TASK_LM_IBA_PushLocalFrame);
   m_CsLF.push_back(C);
-  MT_WRITE_LOCK_END(m_MT, C.m_iFrm, MT_TASK_LM_IBA_PushCurrentFrame);
+  MT_WRITE_LOCK_END(m_MT, C.m_iFrm, MT_TASK_LM_IBA_PushLocalFrame);
 }
 
-void LocalMap::IBA_PushCurrentFrame(const CameraLF &C, const GlobalMap::InputKeyFrame &KF) {
-  MT_WRITE_LOCK_BEGIN(m_MT, C.m_iFrm, MT_TASK_LM_IBA_PushCurrentFrame);
-  m_CsLF.push_back(C);
-  m_CsKF.Push(KF.m_C.m_T);
+void LocalMap::IBA_PushKeyFrame(const GlobalMap::InputKeyFrame &KF) {
+  MT_WRITE_LOCK_BEGIN(m_MT, KF.m_T.m_iFrm, MT_TASK_LM_IBA_PushKeyFrame);
+  m_CsKF.push_back(CameraKF(KF.m_C.m_T, KF.m_T.m_iFrm));
   const int nKFs = static_cast<int>(m_iKF2d.size());
   m_iKF2d.push_back(m_iKF2d.back());
   const int NX = static_cast<int>(KF.m_Xs.size());
@@ -59,26 +57,27 @@ void LocalMap::IBA_PushCurrentFrame(const CameraLF &C, const GlobalMap::InputKey
     }
     m_uds.insert(m_uds.begin() + id, Nx, LM_FLAG_TRACK_DEFAULT);
   }
-  m_ucsKF.push_back(LM_FLAG_FRAME_DEFAULT);
-  MT_WRITE_LOCK_END(m_MT, C.m_iFrm, MT_TASK_LM_IBA_PushCurrentFrame);
+  MT_WRITE_LOCK_END(m_MT, KF.m_T.m_iFrm, MT_TASK_LM_IBA_PushKeyFrame);
 }
 
-void LocalMap::IBA_DeleteKeyFrame(const int iKF) {
-  const int nKFs = m_CsKF.Size();
-  m_CsKF.Erase(iKF);
+void LocalMap::IBA_DeleteKeyFrame(const int iFrm, const int iKF) {
+  MT_WRITE_LOCK_BEGIN(m_MT, iFrm, MT_TASK_LM_IBA_DeleteKeyFrame);
+  const int nKFs = static_cast<int>(m_CsKF.size());
+  m_CsKF.erase(m_CsKF.begin() + iKF);
   const int id1 = m_iKF2d[iKF], id2 = m_iKF2d[iKF + 1], Nd = id2 - id1;
   for (int jKF = iKF + 1; jKF <= nKFs; ++jKF) {
     m_iKF2d[jKF] -= Nd;
   }
   m_iKF2d.erase(m_iKF2d.begin() + iKF);
   m_ds.erase(m_ds.begin() + id1, m_ds.begin() + id2);
-  m_ucsKF.erase(m_ucsKF.begin() + iKF);
   m_uds.erase(m_uds.begin() + id1, m_uds.begin() + id2);
+  MT_WRITE_LOCK_END(m_MT, iFrm, MT_TASK_LM_IBA_DeleteKeyFrame);
 }
 
 ubyte LocalMap::IBA_Synchronize(const int iFrm, std::list<CameraLF> &CsLF,
-                                AlignedVector<Rigid3D> &CsKF, std::vector<ubyte> &ucsKF,
-                                std::vector<Depth::InverseGaussian> &ds, std::vector<ubyte> &uds) {
+                                std::vector<CameraKF> &CsKF,
+                                std::vector<Depth::InverseGaussian> &ds,
+                                std::vector<ubyte> &uds) {
   ubyte Uc = LM_FLAG_FRAME_DEFAULT;
   MT_WRITE_LOCK_BEGIN(m_MT, iFrm, MT_TASK_LM_IBA_Synchronize);
   if (m_Uc) {
@@ -92,26 +91,35 @@ ubyte LocalMap::IBA_Synchronize(const int iFrm, std::list<CameraLF> &CsLF,
     m_Uc = LM_FLAG_FRAME_DEFAULT;
     const ubyte uc = Uc & LM_FLAG_FRAME_UPDATE_CAMERA_KF, ud = Uc & LM_FLAG_FRAME_UPDATE_DEPTH;
     if (uc || ud) {
-      const int nKFs = m_CsKF.Size();
-      m_ucsKF.swap(ucsKF);
-      m_ucsKF.assign(nKFs, LM_FLAG_FRAME_DEFAULT);
-      if (uc) {
-        CsKF.Set(m_CsKF);
-      }
-      m_uds.swap(uds);
-      m_uds.resize(uds.size());
-      if (ud) {
+      const int nKFs = static_cast<int>(m_CsKF.size());
 #ifdef CFG_DEBUG
-        UT_ASSERT(ds.size() == m_ds.size());
+      UT_ASSERT(static_cast<int>(CsKF.size()) == nKFs && ds.size() == m_ds.size());
 #endif
-        for (int iKF = 0; iKF < nKFs; ++iKF) {
-          if (!(ucsKF[iKF] & LM_FLAG_FRAME_UPDATE_DEPTH)) {
-            continue;
-          }
+      if (ud) {
+        m_uds.swap(uds);
+        m_uds.assign(uds.size(), LM_FLAG_TRACK_DEFAULT);
+      }
+      for (int iKF = 0; iKF < nKFs; ++iKF) {
+        CameraKF &C1 = m_CsKF[iKF];
+        if (C1.m_uc == LM_FLAG_FRAME_DEFAULT) {
+          continue;
+        }
+        CameraKF &C2 = CsKF[iKF];
+#ifdef CFG_DEBUG
+        UT_ASSERT(C1.m_iFrm == C2.m_iFrm);
+#endif
+        if (C1.m_uc & LM_FLAG_FRAME_UPDATE_CAMERA_KF) {
+          C2.m_C = C1.m_C;
+#ifdef CFG_CHECK_REPROJECTION
+          C2.m_e = C1.m_e;
+#endif
+        }
+        if (C1.m_uc & LM_FLAG_FRAME_UPDATE_DEPTH) {
           const int id1 = m_iKF2d[iKF], id2 = m_iKF2d[iKF + 1], Nx = id2 - id1;
-          memset(m_uds.data() + id1, LM_FLAG_TRACK_DEFAULT, Nx);
           memcpy(ds.data() + id1, m_ds.data() + id1, sizeof(Depth::InverseGaussian) * Nx);
         }
+        C2.m_uc = C1.m_uc;
+        C1.m_uc = LM_FLAG_FRAME_DEFAULT;
       }
     }
   }
@@ -121,9 +129,15 @@ ubyte LocalMap::IBA_Synchronize(const int iFrm, std::list<CameraLF> &CsLF,
 
 void LocalMap::LBA_Update(const int iFrm1, const int iFrm2, const std::vector<int> &ic2LF,
                           const AlignedVector<Camera> &CsLF, const std::vector<ubyte> &ucsLF,
-                          const AlignedVector<Rigid3D> &CsKF, const std::vector<ubyte> &ucsKF,
-                          const std::vector<int> &iKF2d, const std::vector<Depth::InverseGaussian> &ds,
-                          const std::vector<ubyte> &uds) {
+                          const std::vector<int> &iFrmsKF, const AlignedVector<Rigid3D> &CsKF,
+                          const std::vector<ubyte> &ucsKF, const std::vector<int> &iKF2d,
+                          const std::vector<Depth::InverseGaussian> &ds,
+                          const std::vector<ubyte> &uds
+#ifdef CFG_CHECK_REPROJECTION
+                        , const std::vector<std::pair<float, float> > &esLF,
+                          const std::vector<std::pair<float, float> > &esKF
+#endif
+                        ) {
   MT_WRITE_LOCK_BEGIN(m_MT, iFrm2, MT_TASK_LM_LBA_Update);
   const int nLFs = CsLF.Size();
 #ifdef CFG_DEBUG
@@ -144,57 +158,68 @@ void LocalMap::LBA_Update(const int iFrm1, const int iFrm2, const std::vector<in
     C->m_C = CsLF[iLF];
     C->m_uc = LM_FLAG_FRAME_UPDATE_CAMERA_LF;
     m_Uc |= LM_FLAG_FRAME_UPDATE_CAMERA_LF;
-  }
-  const int nKFs = CsKF.Size();
-#ifdef CFG_DEBUG
-  UT_ASSERT(nKFs <= m_CsKF.Size() && ds.size() <= m_ds.size());
+#ifdef CFG_CHECK_REPROJECTION
+    C->m_e = esLF[iLF];
 #endif
+  }
+  std::vector<CameraKF>::iterator i = m_CsKF.begin();
+  const int nKFs = CsKF.Size();
   for (int iKF = 0; iKF < nKFs; ++iKF) {
     const ubyte uc = ucsKF[iKF];
     if (!uc) {
       continue;
-    } else if (uc & LM_FLAG_FRAME_UPDATE_CAMERA_KF) {
-      m_CsKF[iKF] = CsKF[iKF];
+    }
+    const int iFrm = iFrmsKF[iKF];
+    i = std::lower_bound(i, m_CsKF.end(), iFrm);
+    if (i == m_CsKF.end()) {
+      break;
+    } else if (i->m_iFrm != iFrm) {
+      continue;
+    }
+    if (uc & LM_FLAG_FRAME_UPDATE_CAMERA_KF) {
+      i->m_C = CsKF[iKF];
     }
     if (uc & LM_FLAG_FRAME_UPDATE_DEPTH) {
-      const int Nx = iKF2d[iKF + 1] - iKF2d[iKF];
+      const int _iKF = static_cast<int>(i - m_CsKF.begin());
+      const int id1 = iKF2d[iKF], id2 = iKF2d[iKF + 1], Nx = id2 - id1;
+      const int _id1 = m_iKF2d[_iKF], _id2 = m_iKF2d[_iKF + 1];
 #ifdef CFG_DEBUG
-      UT_ASSERT(Nx <= m_iKF2d[iKF + 1] - m_iKF2d[iKF]);
+      UT_ASSERT(Nx <= _id2 - _id1);
 #endif
-      memcpy(m_ds.data() + m_iKF2d[iKF], ds.data() + iKF2d[iKF],
-             sizeof(Depth::InverseGaussian) * Nx);
-      const ubyte *uds1 = uds.data() + iKF2d[iKF];
-      ubyte *uds2 = m_uds.data() + m_iKF2d[iKF];
+      memcpy(m_ds.data() + _id1, ds.data() + id1, sizeof(Depth::InverseGaussian) * Nx);
+      const ubyte *uds1 = uds.data() + id1;
+      ubyte *uds2 = m_uds.data() + _id1;
       for (int ix = 0; ix < Nx; ++ix) {
         uds2[ix] |= uds1[ix];
       }
     }
+    i->m_uc |= uc;
     m_Uc |= uc;
-    m_ucsKF[iKF] |= uc;
+#ifdef CFG_CHECK_REPROJECTION
+    i->m_e = esKF[iKF];
+#endif
   }
   MT_WRITE_LOCK_END(m_MT, iFrm2, MT_TASK_LM_LBA_Update);
 }
 
 void LocalMap::SaveB(FILE *fp) {
   MT_READ_LOCK_BEGIN(m_MT, MT_TASK_NONE, MT_TASK_NONE);
-  FRM::ListSaveB(m_CsLF, fp);
-  m_CsKF.SaveB(fp);
+  UT::ListSaveB(m_CsLF, fp);
+  UT::VectorSaveB(m_CsKF, fp);
   UT::VectorSaveB(m_ds, fp);
   UT::VectorSaveB(m_iKF2d, fp);
   UT::SaveB(m_Uc, fp);
-  UT::VectorSaveB(m_ucsKF, fp);
   UT::VectorSaveB(m_uds, fp);
   MT_READ_LOCK_END(m_MT, MT_TASK_NONE, MT_TASK_NONE);
 }
 
 void LocalMap::LoadB(FILE *fp) {
   MT_WRITE_LOCK_BEGIN(m_MT, MT_TASK_NONE, MT_TASK_NONE);
-  FRM::ListLoadB(m_CsLF, fp);
-  m_CsKF.LoadB(fp);
+  UT::ListLoadB(m_CsLF, fp);
+  UT::VectorLoadB(m_CsKF, fp);
   UT::VectorLoadB(m_ds, fp);
   UT::VectorLoadB(m_iKF2d, fp);
   UT::LoadB(m_Uc, fp);
-  UT::VectorLoadB(m_ucsKF, fp);
   UT::VectorLoadB(m_uds, fp);
   MT_WRITE_LOCK_END(m_MT, MT_TASK_NONE, MT_TASK_NONE);
 }
@@ -208,30 +233,23 @@ void LocalMap::AssertConsistency() {
        ++C2 != m_CsLF.end(); C1 = C2) {
     UT_ASSERT(C1->m_iFrm < C2->m_iFrm);
   }
-  const int nKFs = m_CsKF.Size();
-  for (int iKF = 0; iKF < nKFs; ++iKF) {
-    m_CsKF[iKF].AssertOrthogonal();
+  ubyte Uc = GM_FLAG_FRAME_DEFAULT;
+  for (std::list<CameraLF>::const_iterator C = m_CsLF.begin(); C != m_CsLF.end(); ++C) {
+    C->m_C.AssertConsistency();
+    Uc |= C->m_uc;
   }
+  const int nKFs = static_cast<int>(m_CsKF.size());
+  for (int iKF = 0; iKF < nKFs; ++iKF) {
+    const CameraKF &C = m_CsKF[iKF];
+    C.m_C.AssertOrthogonal();
+    Uc |= C.m_uc;
+  }
+  UT_ASSERT(m_Uc == Uc);
   UT_ASSERT(static_cast<int>(m_iKF2d.size()) == nKFs + 1);
   UT_ASSERT(m_iKF2d[0] == 0 && m_iKF2d[nKFs] == static_cast<int>(m_ds.size()));
-  if (m_Uc & LM_FLAG_FRAME_UPDATE_CAMERA_LF) {
-    bool exist = false;
-    for (std::list<CameraLF>::const_iterator C = m_CsLF.begin(); C != m_CsLF.end() && !exist; ++C) {
-      exist = C->m_uc == LM_FLAG_FRAME_UPDATE_CAMERA_LF;
-    }
-    UT_ASSERT(exist);
-  } else {
-    for (std::list<CameraLF>::const_iterator C = m_CsLF.begin(); C != m_CsLF.end(); ++C) {
-      UT_ASSERT(C->m_uc == LM_FLAG_FRAME_DEFAULT);
-    }
-  }
-  UT_ASSERT((m_Uc & LM_FLAG_FRAME_UPDATE_CAMERA_KF) != 0 == UT::VectorExistFlag<ubyte>
-            (m_ucsKF.data(), nKFs, LM_FLAG_FRAME_UPDATE_CAMERA_KF));
-  UT_ASSERT((m_Uc & LM_FLAG_FRAME_UPDATE_DEPTH) != 0 ==
-            UT::VectorExistFlag<ubyte>(m_ucsKF.data(), nKFs, LM_FLAG_FRAME_UPDATE_DEPTH));
   for (int iKF = 0; iKF < nKFs; ++iKF) {
     const int id1 = m_iKF2d[iKF], id2 = m_iKF2d[iKF + 1];
-    UT_ASSERT((m_ucsKF[iKF] & LM_FLAG_FRAME_UPDATE_DEPTH) != 0 ==
+    UT_ASSERT((m_CsKF[iKF].m_uc & LM_FLAG_FRAME_UPDATE_DEPTH) != 0 ==
               UT::VectorExistFlag<ubyte>(m_uds.data() + id1, id2 - id1,
                                          LM_FLAG_TRACK_UPDATE_DEPTH));
   }
