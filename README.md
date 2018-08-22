@@ -59,7 +59,7 @@ Run ICE-BA in stereo mode. Please refer to scripts/run_ice_ba_stereo.sh for more
 Run ICE-BA in monocular mode. Please refer to scripts/run_ice_ba_mono.sh for more details about how to run the example.  
 
 ### run back-end only
-You can just run back-end if you provide the feature message for each frame.  
+Front-end results can be saved into files. Back-end only mode loads these files and runs backend only.  
 Please refer to scripts/run_backend_only.sh for more details about how to run the example.  
 
 ## 5. Contribution
