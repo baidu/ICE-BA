@@ -1609,7 +1609,7 @@ class LocalBundleAdjustor : public MT::Thread {
                                           const LA::AlignedMatrixXf &S,
                                           const LA::AlignedVectorXf &x,
                                           PS::Joint *PS);
-  virtual MS ComputeMarginalizationStatistic(const LA::AlignedVectorXf *x = NULL);
+  virtual MS ComputeMarginalizationStatistic(const MH &_MH, const LA::AlignedVectorXf *x = NULL);
   virtual void AssertConsistency(const bool chkFlag = true, const bool chkSchur = true);
   virtual void AccumulateFactorFeatureDD(const FRM::Frame *F,
                                          AlignedVector<FTR::Factor::DD> *Sadds,

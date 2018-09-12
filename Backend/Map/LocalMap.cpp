@@ -78,36 +78,38 @@ ubyte LocalMap::IBA_Synchronize(const int iFrm, std::list<CameraLF> &CsLF,
                                 std::vector<CameraKF> &CsKF,
                                 std::vector<Depth::InverseGaussian> &ds,
                                 std::vector<ubyte> &uds) {
-  ubyte Uc = LM_FLAG_FRAME_DEFAULT;
+  ubyte ret;
   MT_WRITE_LOCK_BEGIN(m_MT, iFrm, MT_TASK_LM_IBA_Synchronize);
+  ret = m_Uc;
   if (m_Uc) {
-    if (m_Uc & LM_FLAG_FRAME_UPDATE_CAMERA_LF) {
+    const ubyte ucLF = m_Uc & LM_FLAG_FRAME_UPDATE_CAMERA_LF;
+    const ubyte ucKF = m_Uc & LM_FLAG_FRAME_UPDATE_CAMERA_KF;
+    const ubyte udKF = m_Uc & LM_FLAG_FRAME_UPDATE_DEPTH;
+    m_Uc = LM_FLAG_FRAME_DEFAULT;
+    if (ucLF) {
       CsLF = m_CsLF;
       for (std::list<CameraLF>::iterator C = m_CsLF.begin(); C != m_CsLF.end(); ++C) {
         C->m_uc = LM_FLAG_FRAME_DEFAULT;
       }
     }
-    Uc = m_Uc;
-    m_Uc = LM_FLAG_FRAME_DEFAULT;
-    const ubyte uc = Uc & LM_FLAG_FRAME_UPDATE_CAMERA_KF, ud = Uc & LM_FLAG_FRAME_UPDATE_DEPTH;
-    if (uc || ud) {
+    if (ucKF || udKF) {
       const int nKFs = static_cast<int>(m_CsKF.size());
 #ifdef CFG_DEBUG
       UT_ASSERT(static_cast<int>(CsKF.size()) == nKFs && ds.size() == m_ds.size());
 #endif
-      if (ud) {
+      if (udKF) {
         m_uds.swap(uds);
         m_uds.assign(uds.size(), LM_FLAG_TRACK_DEFAULT);
       }
       for (int iKF = 0; iKF < nKFs; ++iKF) {
-        CameraKF &C1 = m_CsKF[iKF];
-        if (C1.m_uc == LM_FLAG_FRAME_DEFAULT) {
-          continue;
-        }
-        CameraKF &C2 = CsKF[iKF];
+        CameraKF &C1 = m_CsKF[iKF], &C2 = CsKF[iKF];
 #ifdef CFG_DEBUG
         UT_ASSERT(C1.m_iFrm == C2.m_iFrm);
 #endif
+        if (C1.m_uc == LM_FLAG_FRAME_DEFAULT) {
+          C2.m_uc = LM_FLAG_FRAME_DEFAULT;
+          continue;
+        }
         if (C1.m_uc & LM_FLAG_FRAME_UPDATE_CAMERA_KF) {
           C2.m_C = C1.m_C;
 #ifdef CFG_CHECK_REPROJECTION
@@ -124,7 +126,7 @@ ubyte LocalMap::IBA_Synchronize(const int iFrm, std::list<CameraLF> &CsLF,
     }
   }
   MT_WRITE_LOCK_END(m_MT, iFrm, MT_TASK_LM_IBA_Synchronize);
-  return Uc;
+  return ret;
 }
 
 void LocalMap::LBA_Update(const int iFrm1, const int iFrm2, const std::vector<int> &ic2LF,

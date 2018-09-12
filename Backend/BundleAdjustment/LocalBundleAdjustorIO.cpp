@@ -435,7 +435,7 @@ IMU::Delta::ES LocalBundleAdjustor::ComputeErrorStatisticIMU(const AlignedVector
                                                              const AlignedVector<IMU::Delta> &DsLF) {
   IMU::Delta::ES ES;
   ES.Initialize();
-  const int nLFs = int(m_LFs.size());
+  const int nLFs = static_cast<int>(m_LFs.size());
   for (int ic1 = 0, ic2 = 1; ic2 < nLFs; ic1 = ic2++) {
     const int iLF1 = m_ic2LF[ic1], iLF2 = m_ic2LF[ic2];
     const IMU::Delta &D = DsLF[iLF2];
@@ -1149,38 +1149,38 @@ void LocalBundleAdjustor::ComputePriorStatisticJoint(const CameraPrior::Joint &Z
 }
 
 LocalBundleAdjustor::MS
-LocalBundleAdjustor::ComputeMarginalizationStatistic(const LA::AlignedVectorXf *x) {
+LocalBundleAdjustor::ComputeMarginalizationStatistic(const MH &_MH, const LA::AlignedVectorXf *x) {
   MS _MS;
   const int Npg = 2, Npc = 6, Npm = 9;
-  const int Npgm = Npg + (m_MH.m_FdKF.Valid() ? Npm : 0), Npcm = Npc + Npm;
+  const int Npgm = Npg + (_MH.m_FdKF.Valid() ? Npm : 0), Npcm = Npc + Npm;
 #ifdef CFG_DEBUG
   UT_ASSERT(!m_Zp.m_iKFs.empty() && m_Zp.m_iKFs.back() == INT_MAX);
 #endif
   const int Nk = static_cast<int>(m_Zp.m_iKFs.size()) - 1, Npk = Nk * Npc, Npgmk = Npgm + Npk;
-  const int Nc = static_cast<int>(m_MH.m_Fxs.size());
-  UT_ASSERT(m_MH.m_b.Size() == Npgmk + Nc * Npcm);
+  const int Nc = static_cast<int>(_MH.m_Fxs.size());
+  UT_ASSERT(_MH.m_b.Size() == Npgmk + Nc * Npcm);
 #ifdef CFG_DEBUG
   if (x) {
-    UT_ASSERT(x->Size() == m_MH.m_b.Size());
+    UT_ASSERT(x->Size() == _MH.m_b.Size());
   }
 #endif
   int ip;
   const LA::Vector2f *xg = (LA::Vector2f *) (x ? x->Data() : NULL);
   if (x) {
-    _MS.m_Fp = m_MH.m_Fp.GetCost(xg);
+    _MS.m_Fp = _MH.m_Fp.GetCost(xg);
     ip = Npg;
-    if (m_MH.m_FdKF.Valid()) {
-      _MS.m_Fp += m_MH.m_Fp.GetCost((LA::Vector9f *) (x->Data() + ip));
+    if (_MH.m_FdKF.Valid()) {
+      _MS.m_Fp += _MH.m_Fp.GetCost((LA::Vector9f *) (x->Data() + ip));
       ip += Npm;
     }
     for (int ik = 0; ik < Nk; ++ik, ip += Npc) {
-      _MS.m_Fp += m_MH.m_Fp.GetCost((LA::Vector6f *) (x->Data() + ip));
+      _MS.m_Fp += _MH.m_Fp.GetCost((LA::Vector6f *) (x->Data() + ip));
     }
     for (int ic = 0; ic < Nc; ++ic, ip += Npcm) {
       const LA::Vector9f *xm = (LA::Vector9f *) (x->Data() + ip + Npc);
-      _MS.m_Fp += m_MH.m_Fp.GetCost((LA::Vector6f *) (x->Data() + ip), xm);
-      if (ic == 0 && m_MH.m_FdKF.Invalid()) {
-        _MS.m_Fp += m_MH.m_Fp.GetCost(xm);
+      _MS.m_Fp += _MH.m_Fp.GetCost((LA::Vector6f *) (x->Data() + ip), xm);
+      if (ic == 0 && _MH.m_FdKF.Invalid()) {
+        _MS.m_Fp += _MH.m_Fp.GetCost(xm);
       }
     }
 #ifdef CFG_DEBUG
@@ -1197,7 +1197,7 @@ LocalBundleAdjustor::ComputeMarginalizationStatistic(const LA::AlignedVectorXf *
   float *eds2 = &_MS.m_er;
   if (x) {
     ip = Npg;
-    if (m_MH.m_FdKF.Valid()) {
+    if (_MH.m_FdKF.Valid()) {
       xm[0].Set(x->Data() + ip);
       ip += Npm;
     }
@@ -1205,11 +1205,11 @@ LocalBundleAdjustor::ComputeMarginalizationStatistic(const LA::AlignedVectorXf *
     xc[1].Set(x->Data() + ip);   ip += Npc;
     xm[1].Set(x->Data() + ip);   ip += Npm;
   }
-  if (m_MH.m_FdKF.Valid()) {
+  if (_MH.m_FdKF.Valid()) {
     if (x) {
-      _MS.m_Fd = m_MH.m_FdKF.GetCost(BA_WEIGHT_IMU, *xg, xm[0], xc[1], xm[1], &ed);
+      _MS.m_Fd = _MH.m_FdKF.GetCost(BA_WEIGHT_IMU, *xg, xm[0], xc[1], xm[1], &ed);
     } else {
-      _MS.m_Fd = m_MH.m_FdKF.GetCost(BA_WEIGHT_IMU, &ed);
+      _MS.m_Fd = _MH.m_FdKF.GetCost(BA_WEIGHT_IMU, &ed);
     }
     for (int i = 0; i < 5; ++i) {
       eds2[i] = sqrtf(eds1[i].SquaredLength());
@@ -1220,7 +1220,7 @@ LocalBundleAdjustor::ComputeMarginalizationStatistic(const LA::AlignedVectorXf *
       eds2[i] = 0.0f;
     }
   }
-  const int NdLF = m_MH.m_FdsLF.Size();
+  const int NdLF = _MH.m_FdsLF.Size();
 #ifdef CFG_DEBUG
   UT_ASSERT(NdLF == Nc - 1);
 #endif
@@ -1229,15 +1229,15 @@ LocalBundleAdjustor::ComputeMarginalizationStatistic(const LA::AlignedVectorXf *
       UT_SWAP(r1, r2);
       xc[r2].Set(x->Data() + ip);  ip += Npc;
       xm[r2].Set(x->Data() + ip);  ip += Npm;
-      _MS.m_Fd += m_MH.m_FdsLF[i].GetCost(BA_WEIGHT_IMU, *xg, xc[r1], xm[r1], xc[r2], xm[r2], &ed);
+      _MS.m_Fd += _MH.m_FdsLF[i].GetCost(BA_WEIGHT_IMU, *xg, xc[r1], xm[r1], xc[r2], xm[r2], &ed);
     } else {
-      _MS.m_Fd += m_MH.m_FdsLF[i].GetCost(BA_WEIGHT_IMU, &ed);
+      _MS.m_Fd += _MH.m_FdsLF[i].GetCost(BA_WEIGHT_IMU, &ed);
     }
     for (int i = 0; i < 5; ++i) {
       eds2[i] += sqrtf(eds1[i].SquaredLength());
     }
   }
-  const float s = UT::Inverse(static_cast<float>((m_MH.m_FdKF.Valid() ? 1 : 0) + NdLF));
+  const float s = UT::Inverse(static_cast<float>((_MH.m_FdKF.Valid() ? 1 : 0) + NdLF));
   for (int i = 0; i < 5; ++i) {
     eds2[i] *= s;
   }
@@ -1271,7 +1271,7 @@ LocalBundleAdjustor::ComputeMarginalizationStatistic(const LA::AlignedVectorXf *
       xcz.Set(x->Data() + ip);
       ip += Npcm;
     }
-    const MH::Visual &Fx = m_MH.m_Fxs[ic];
+    const MH::Visual &Fx = _MH.m_Fxs[ic];
     const int Nz = Fx.m_Fz.Size();
     for (int iz = 0; iz < Nz; ++iz) {
       _MS.m_Fx += Fx.m_Fz.GetCost(iz, x ? &xcz : NULL, &ex, epsd);

@@ -873,15 +873,15 @@ void LocalBundleAdjustor::Run() {
       }
 #endif
       if (m_Zp.Pose::Valid()) {
-        hist.m_MSLP = ComputeMarginalizationStatistic();
+        hist.m_MSLP = ComputeMarginalizationStatistic(m_MH);
         if (m_MH.SolveLDL(&m_work)) {
-          hist.m_MSEM = ComputeMarginalizationStatistic(&m_MH.m_x);
+          hist.m_MSEM = ComputeMarginalizationStatistic(m_MH, &m_MH.m_x);
         } else {
           hist.m_MSEM.Invalidate();
         }
 #ifdef CFG_GROUND_TRUTH
         if (m_CsGT) {
-          hist.m_MSGT = ComputeMarginalizationStatistic(&m_MH.m_xGT);
+          hist.m_MSGT = ComputeMarginalizationStatistic(m_MH, &m_MH.m_xGT);
         } else {
           hist.m_MSGT.Invalidate();
         }
@@ -1578,6 +1578,7 @@ void LocalBundleAdjustor::ComputeErrorDrift(float *er, float *ep) {
 }
 
 float LocalBundleAdjustor::ComputeRMSE() {
+#ifdef CFG_HISTORY
   float Se2 = 0.0f;
   const int N = static_cast<int>(m_hists.size());
 #ifdef CFG_GROUND_TRUTH
@@ -1590,6 +1591,9 @@ float LocalBundleAdjustor::ComputeRMSE() {
   }
 #endif
   return sqrtf(Se2 / N);
+#else
+  return 0.0f;
+#endif
 }
 
 float LocalBundleAdjustor::GetTotalDistance() {
@@ -1825,9 +1829,9 @@ void LocalBundleAdjustor::SynchronizeData() {
           }
 //#ifdef CFG_DEBUG
 #if 0
-          const KeyFrame &KF = m_KFs[iKF];
-          const int ix = static_cast<int>(KF.m_xs.size()) + iX - iX1;
-          if (KF.m_T.m_iFrm == 1041 && ix == 431) {
+          const int ix = (iKF < static_cast<int>(m_KFs.size()) ?
+                                static_cast<int>(m_KFs[iKF].m_xs.size()) : 0) + iX - iX1;
+          if (IKF->m_T.m_iFrm == 0 && ix == 308) {
             UT::DebugStart();
             X.m_d.Print();
           }
@@ -4611,9 +4615,9 @@ void LocalBundleAdjustor::MarkFeatureMeasurementsUpdateDepth(const FRM::Frame &F
     const FRM::Measurement &Z = F.m_Zs[iZ];
     const int iKF = Z.m_iKF;
     ucsKF[iKF] |= LBA_FLAG_FRAME_UPDATE_DEPTH;
-    ubyte *uds = m_udsGT.data() + m_iKF2d[iKF];
+    ubyte *_uds = uds.data() + m_iKF2d[iKF];
     for (int iz = Z.m_iz1; iz < Z.m_iz2; ++iz) {
-      uds[F.m_zs[iz].m_ix] |= LBA_FLAG_TRACK_UPDATE_DEPTH;
+      _uds[F.m_zs[iz].m_ix] |= LBA_FLAG_TRACK_UPDATE_DEPTH;
     }
   }
 }

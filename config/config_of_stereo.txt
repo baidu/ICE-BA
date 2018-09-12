@@ -1,3 +1,4 @@
+param_depth_initial = 100.0
 visualize = 2
 pause = 0
 print_camera = 0

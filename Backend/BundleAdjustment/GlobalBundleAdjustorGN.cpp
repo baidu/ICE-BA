@@ -1609,6 +1609,7 @@ bool GlobalBundleAdjustor::SolveSchurComplementPCG() {
   return scc;
 }
 
+#ifdef CFG_GROUND_TRUTH
 void GlobalBundleAdjustor::SolveSchurComplementGT(const AlignedVector<Rigid3D> &Cs,
                                                   const AlignedVector<Camera> &CsLM,
                                                   LA::AlignedVectorXf *xs, const bool motion) {
@@ -1676,6 +1677,7 @@ void GlobalBundleAdjustor::SolveSchurComplementGT(const AlignedVector<Rigid3D> &
     }
   }
 }
+#endif
 
 #ifdef GBA_DEBUG_EIGEN_PCG
 static EigenMatrixXd g_A/*, g_S, g_SI*/, g_M, g_L, g_D, g_LT;
@@ -2742,6 +2744,7 @@ void GlobalBundleAdjustor::SolveBackSubstitution() {
 #endif
 }
 
+#ifdef CFG_GROUND_TRUTH
 void GlobalBundleAdjustor::SolveBackSubstitutionGT(const std::vector<Depth::InverseGaussian> &ds,
                                                    LA::AlignedVectorXf *xs) {
   if (!m_dsGT) {
@@ -2768,6 +2771,7 @@ void GlobalBundleAdjustor::SolveBackSubstitutionGT(const std::vector<Depth::Inve
   dusGT -= dus;
   xs->Push(dusGT);
 }
+#endif
 
 bool GlobalBundleAdjustor::EmbeddedMotionIteration() {
   const int pc = 6, pm = 9;

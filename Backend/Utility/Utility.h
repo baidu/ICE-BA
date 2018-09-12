@@ -29,6 +29,7 @@
 #undef _N
 #undef _P
 #undef _C
+#undef _S
 #endif
 
 #define UT_STRING_WIDTH      79

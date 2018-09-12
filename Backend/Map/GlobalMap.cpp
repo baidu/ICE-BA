@@ -67,9 +67,8 @@ ubyte GlobalMap::LBA_Synchronize(const int iFrm, AlignedVector<Rigid3D> &Cs,
                                ) {
   ubyte ret;
   MT_WRITE_LOCK_BEGIN(m_MT, iFrm, MT_TASK_GM_LBA_Synchronize);
-  if (m_Uc == GM_FLAG_FRAME_DEFAULT) {
-    ret = GM_FLAG_FRAME_DEFAULT;
-  } else {
+  ret = m_Uc;
+  if (m_Uc) {
     m_Uc = GM_FLAG_FRAME_DEFAULT;
     const int N = static_cast<int>(m_Cs.size());
 #ifdef CFG_DEBUG
@@ -98,7 +97,6 @@ ubyte GlobalMap::LBA_Synchronize(const int iFrm, AlignedVector<Rigid3D> &Cs,
 #endif
       C.m_uc = GM_FLAG_FRAME_DEFAULT;
     }
-    ret = GM_FLAG_FRAME_UPDATE_CAMERA;
   }
   MT_WRITE_LOCK_END(m_MT, iFrm, MT_TASK_GM_LBA_Synchronize);
   return ret;

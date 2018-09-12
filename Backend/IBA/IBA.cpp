@@ -226,6 +226,13 @@ void Solver::PushCurrentFrame(const CurrentFrame &CF, const KeyFrame *KF, const 
     m_internal->m_LM.IBA_PushLocalFrame(LocalMap::CameraLF(m_internal->m_ILF.m_C, CF.iFrm));
     m_internal->m_LBA.PushLocalFrame(m_internal->m_ILF);
   }
+#if 0
+  if (CF.iFrm == 49) {
+    UT::DebugStart();
+    m_internal->m_LBA.m_verbose = 2;
+    UT::DebugStop();
+  }
+#endif
   m_internal->m_LBA.WakeUp(serial);
   if (m_internal->m_debug) {
     m_internal->AssertConsistency();
@@ -789,7 +796,7 @@ bool Solver::GetSlidingWindow(SlidingWindow *SW) {
           continue;
         }
         X2.idx = idxs[ix];
-        if (X2.idx == -1) {
+        if (X2.idx == -1 || ds[ix].Invalid()) {
           continue;
         }
         C.ApplyInversely(xs[ix], 1.0f / ds[ix].u(), X1);
@@ -2400,6 +2407,9 @@ bool LoadCurrentFrame(const std::string fileName, CurrentFrame *CF, KeyFrame *KF
   fclose(fp);
 #ifdef IBA_DEBUG_INVALIDATE_INITIAL_CAMERAS
   CF->C.C.R[0][0] = FLT_MAX;
+  CF->C.v[0] = FLT_MAX;
+  CF->C.ba[0] = FLT_MAX;
+  CF->C.bw[0] = FLT_MAX;
   KF->C.R[0][0] = FLT_MAX;
 #endif
 #ifdef IBA_DEBUG_INVALIDATE_INITIAL_POINTS
